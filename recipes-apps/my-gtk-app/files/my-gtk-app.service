@@ -1,0 +1,17 @@
+[Unit]
+Description=Smart Home GTK3 Dashboard
+After=weston-graphical-session.service
+Requires=weston-graphical-session.service
+
+[Service]
+Type=simple
+User=weston
+Group=weston
+ExecStart=/opt/my-gtk-app/launch-my-gtk-app.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

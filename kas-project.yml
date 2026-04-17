@@ -1,0 +1,78 @@
+header:
+  version: 14
+
+machine: stm32mp1
+distro: openstlinux-weston
+target: st-image-weston
+
+repos:
+  # Poky — OE-Core base + BitBake engine
+  poky:
+    url: https://git.yoctoproject.org/poky
+    branch: scarthgap
+    commit: 7d50718f90c51fb7f650c9db59b28c6e0194e5d2
+    layers:
+      meta:
+      meta-poky:
+      meta-yocto-bsp:
+
+  # OpenEmbedded layers — Python, GNOME/GTK, networking, multimedia
+  meta-openembedded:
+    url: https://github.com/openembedded/meta-openembedded
+    branch: scarthgap
+    commit: 4d3e2639dec542b58708244662d5ce36810fc510
+    layers:
+      meta-oe:
+      meta-python:
+      meta-gnome:
+      meta-multimedia:
+      meta-networking:
+      meta-webserver:
+
+  # ST BSP — STM32MP1 hardware support (kernel, GPU drivers, bootloader recipes)
+  meta-st-stm32mp:
+    url: https://github.com/STMicroelectronics/meta-st-stm32mp.git
+    branch: scarthgap
+    commit: 701c0ddb5afa29842c4146773d5303a1f192ff19
+
+  # ST OpenSTLinux distro — Weston image, weston-init, openstlinux-weston distro config
+  meta-st-openstlinux:
+    url: https://github.com/STMicroelectronics/meta-st-openstlinux.git
+    branch: scarthgap
+    commit: 993e43adedbfe95dca8e93a64ec091a83a604633
+
+local_conf_header:
+  # ── Hardware & distro ────────────────────────────────────────────────────
+  main: |
+    ACCEPT_EULA_stm32mp1 = "1"
+
+  # ── Build parallelism (tune to your machine: ~2 GB RAM per thread) ───────
+  parallelism: |
+    BB_NUMBER_THREADS = "4"
+    PARALLEL_MAKE = "-j4"
+
+  # ── SD card image format (WIC for STM32MP157D-DK1, optee boot scheme) ───
+  wic: |
+    WKS_IMAGE_FSTYPES += "wic wic.bz2 wic.bmap"
+    WKS_FILE = "sdcard-stm32mp157d-dk1-optee-example.wks.in"
+    WIC_CREATE_EXTRA_ARGS = "--no-fstab-update"
+    WKS_FILE_DEPENDS ?= " \
+        virtual/bootloader \
+        virtual/trusted-firmware-a \
+        virtual-optee-os \
+    "
+
+  # ── Packages included in the image ───────────────────────────────────────
+  image_install: |
+    IMAGE_INSTALL:append = " kernel-image kernel-devicetree stm32mp-extlinux"
+    IMAGE_INSTALL:append = " python3 my-gtk-app"
+    IMAGE_INSTALL:append = " network-config time-server"
+    IMAGE_INSTALL:append = " ble-tools"
+
+  # ── Remove ST splash screen (eliminates 90 s psplash-drm boot wait) ──────
+  distro_features: |
+    DISTRO_FEATURES:remove = "splashscreen"
+
+  # ── Development image tweaks (blank root password, SSH access) ───────────
+  dev: |
+    EXTRA_IMAGE_FEATURES ?= "debug-tweaks"

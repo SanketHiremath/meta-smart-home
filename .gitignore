@@ -1,0 +1,8 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# BitBake / Yocto build artefacts (never in a layer)
+*.lock
+*.log

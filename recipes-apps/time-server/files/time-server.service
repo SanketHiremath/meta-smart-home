@@ -1,0 +1,17 @@
+[Unit]
+Description=NTP Time Web Server
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+# Runs as root: required to bind port 80 on Linux.
+# Acceptable for a trusted LAN-only embedded device.
+Type=simple
+ExecStart=/usr/bin/python3 /opt/time-server/time_server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
