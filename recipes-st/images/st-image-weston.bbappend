@@ -6,6 +6,6 @@ CORE_IMAGE_EXTRA_INSTALL:remove = "packagegroup-st-demo"
 
 CORE_IMAGE_EXTRA_INSTALL:append = " \
     wpa-supplicant \
-    linux-firmware-rtl8188eu \
+    linux-firmware-rtl8188 \
     wifi-config \
 "
