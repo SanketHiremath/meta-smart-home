@@ -1,5 +1,5 @@
 # =========================================================================
-# linux-stm32mp bbappend — adds Bluetooth config fragment
+# linux-stm32mp bbappend — adds kernel config fragments (Bluetooth, WiFi)
 # =========================================================================
 # ST's kernel recipe (linux-stm32mp.inc) does NOT use kernel-yocto.
 # It applies config fragments via its own mechanism:
@@ -7,8 +7,9 @@
 #   2. KERNEL_CONFIG_FRAGMENTS lists the full path to each fragment
 #   3. do_configure:append calls merge_config.sh on all listed fragments
 #
-# Our fragment file lives at:
+# Fragment files live at:
 #   meta-smart-home/recipes-kernel/linux/linux-stm32mp/bluetooth.cfg
+#   meta-smart-home/recipes-kernel/linux/linux-stm32mp/wifi.cfg
 # =========================================================================
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
