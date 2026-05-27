@@ -13,8 +13,10 @@
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
 
-# Step 1 — fetch the file into ${WORKDIR}/fragments/bluetooth.cfg
+# Step 1 — fetch the files into ${WORKDIR}/fragments/
 SRC_URI:append = " file://bluetooth.cfg;subdir=fragments"
+SRC_URI:append = " file://wifi.cfg;subdir=fragments"
 
-# Step 2 — tell merge_config.sh to include it
+# Step 2 — tell merge_config.sh to include them
 KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/fragments/bluetooth.cfg"
+KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/fragments/wifi.cfg"
