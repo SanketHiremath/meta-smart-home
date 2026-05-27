@@ -29,7 +29,7 @@ do_install() {
     # The template unit wpa_supplicant@.service is shipped by wpa-supplicant.
     # This is equivalent to: systemctl enable wpa_supplicant@wlan0
     install -d ${D}${sysconfdir}/systemd/system/multi-user.target.wants
-    ln -sf /lib/systemd/system/wpa_supplicant@.service \
+    ln -sf ${systemd_system_unitdir}/wpa_supplicant@.service \
         ${D}${sysconfdir}/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service
 }
 
