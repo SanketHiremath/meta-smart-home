@@ -70,3 +70,69 @@ def test_parse_ip_found():
 
 def test_parse_ip_not_found():
     assert smart.parse_ip_from_addr("no address here") == ""
+
+
+def test_weather_fetcher_success():
+    raw = {"current": {
+        "relativehumidity_2m": 55,
+        "temperature_2m": 62.0,
+        "apparent_temperature": 57.0,
+        "uv_index": 3.1,
+        "weathercode": 0,
+    }}
+    results = []
+
+    fetcher = smart.WeatherFetcher(lambda d: results.append(d))
+
+    with patch("smart._urllib_request.urlopen") as mock_open:
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(raw).encode()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value = mock_resp
+        with patch.object(smart.GLib, "idle_add", side_effect=lambda fn, arg: fn(arg)):
+            fetcher._fetch()
+
+    assert len(results) == 1
+    assert results[0].humidity  == 55
+    assert results[0].condition == "Clear Sky"
+    assert results[0].cached    == False
+
+
+def test_weather_fetcher_network_error_no_cache():
+    results = []
+    fetcher = smart.WeatherFetcher(lambda d: results.append(d))
+
+    with patch("smart._urllib_request.urlopen", side_effect=OSError("no network")):
+        with patch.object(smart.GLib, "idle_add", side_effect=lambda fn, arg: fn(arg)):
+            fetcher._fetch()
+
+    assert results == [None]
+
+
+def test_weather_fetcher_network_error_uses_cache():
+    raw = {"current": {
+        "relativehumidity_2m": 70, "temperature_2m": 50.0,
+        "apparent_temperature": 45.0, "uv_index": 1.0, "weathercode": 3,
+    }}
+    results = []
+    fetcher = smart.WeatherFetcher(lambda d: results.append(d))
+
+    # First fetch succeeds — populates cache
+    with patch("smart._urllib_request.urlopen") as mock_open:
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(raw).encode()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value = mock_resp
+        with patch.object(smart.GLib, "idle_add", side_effect=lambda fn, arg: fn(arg)):
+            fetcher._fetch()
+
+    # Second fetch fails — should return cached data
+    with patch("smart._urllib_request.urlopen", side_effect=OSError("no network")):
+        with patch.object(smart.GLib, "idle_add", side_effect=lambda fn, arg: fn(arg)):
+            fetcher._fetch()
+
+    assert len(results) == 2
+    assert results[1].cached   == True
+    assert results[1].humidity == 70

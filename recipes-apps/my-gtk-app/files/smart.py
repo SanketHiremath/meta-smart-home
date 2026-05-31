@@ -105,3 +105,84 @@ def parse_ip_from_addr(output):
     """Extract first IPv4 address from `ip addr show` output."""
     m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
     return m.group(1) if m else ""
+
+
+# ── Open-Meteo endpoint ────────────────────────────────────────────────────────
+_METEO_URL = (
+    "https://api.open-meteo.com/v1/forecast"
+    "?latitude=39.7684&longitude=-86.1581"
+    "&current=relativehumidity_2m,temperature_2m,apparent_temperature"
+    ",uv_index,weathercode"
+    "&temperature_unit=fahrenheit"
+    "&timezone=America%2FIndiana%2FIndianapolis"
+)
+
+
+class WeatherFetcher:
+    def __init__(self, callback):
+        self._callback = callback   # callable(WeatherData | None)
+        self._last = None
+
+    def fetch_async(self):
+        threading.Thread(target=self._fetch, daemon=True).start()
+
+    def _fetch(self):
+        try:
+            with _urllib_request.urlopen(_METEO_URL, timeout=10) as resp:
+                raw = json.loads(resp.read())
+            data = parse_weather_response(raw)
+            self._last = data
+            GLib.idle_add(self._callback, data)
+        except Exception:
+            if self._last is not None:
+                cached = WeatherData(
+                    humidity    = self._last.humidity,
+                    temperature = self._last.temperature,
+                    feels_like  = self._last.feels_like,
+                    uv_index    = self._last.uv_index,
+                    condition   = self._last.condition,
+                    fetched_at  = self._last.fetched_at,
+                    cached      = True,
+                )
+                GLib.idle_add(self._callback, cached)
+            else:
+                GLib.idle_add(self._callback, None)
+
+
+# ── WiFi reader ────────────────────────────────────────────────────────────────
+def read_wifi_status():
+    """Returns (ssid, bars 0-4, ip)."""
+    return _wifi_ssid(), _wifi_bars(), _wifi_ip()
+
+
+def _wifi_ssid():
+    try:
+        out = subprocess.check_output(
+            ["wpa_cli", "-i", "wlan0", "status"],
+            stderr=subprocess.DEVNULL, timeout=3, text=True,
+        )
+        return parse_ssid_from_wpa_cli(out)
+    except Exception:
+        return "No signal"
+
+
+def _wifi_bars():
+    try:
+        with open("/proc/net/wireless") as f:
+            for line in f:
+                if "wlan0" in line or "wlu1u3" in line:
+                    return parse_signal_bars(line)
+    except Exception:
+        pass
+    return 0
+
+
+def _wifi_ip():
+    try:
+        out = subprocess.check_output(
+            ["ip", "addr", "show", "wlan0"],
+            stderr=subprocess.DEVNULL, timeout=3, text=True,
+        )
+        return parse_ip_from_addr(out)
+    except Exception:
+        return ""
