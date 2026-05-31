@@ -36,3 +36,72 @@ TILE_UV        = (0.165, 0.145, 0.063)   # #2a2510  UV index tile
 TILE_WIFI      = (0.102, 0.125, 0.125)   # #1a2020  WiFi tile
 NAV_BG         = (0.102, 0.086, 0.063)   # #1a1610  bottom nav
 PAD            = 6                        # grid gap px
+
+# ── WMO weather code → condition string ────────────────────────────────────────
+_WMO = {
+    0: "Clear Sky",
+    1: "Partly Cloudy", 2: "Partly Cloudy", 3: "Partly Cloudy",
+    45: "Foggy", 48: "Foggy",
+    51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
+    56: "Freezing Drizzle", 57: "Freezing Drizzle",
+    61: "Rain", 63: "Rain", 65: "Heavy Rain",
+    66: "Freezing Rain", 67: "Freezing Rain",
+    71: "Snow", 73: "Snow", 75: "Heavy Snow", 77: "Snow Grains",
+    80: "Rain Showers", 81: "Rain Showers", 82: "Heavy Showers",
+    85: "Snow Showers", 86: "Snow Showers",
+    95: "Thunderstorm", 96: "Thunderstorm w/ Hail", 99: "Thunderstorm w/ Hail",
+}
+
+def wmo_condition(code):
+    return _WMO.get(code, "Unknown")
+
+
+@dataclass
+class WeatherData:
+    humidity:    int
+    temperature: float   # °F
+    feels_like:  float   # °F
+    uv_index:    float
+    condition:   str
+    fetched_at:  str     # "HH:MM"
+    cached:      bool = False
+
+
+def parse_weather_response(raw):
+    """Parse an Open-Meteo /v1/forecast JSON dict into WeatherData."""
+    c = raw["current"]
+    return WeatherData(
+        humidity    = int(c["relativehumidity_2m"]),
+        temperature = float(c["temperature_2m"]),
+        feels_like  = float(c["apparent_temperature"]),
+        uv_index    = float(c["uv_index"]),
+        condition   = wmo_condition(int(c["weathercode"])),
+        fetched_at  = datetime.datetime.now().strftime("%H:%M"),
+    )
+
+
+def parse_signal_bars(proc_line):
+    """Parse a /proc/net/wireless data line → 1–4 bars (0 on bad input)."""
+    try:
+        parts = proc_line.split()
+        dbm = float(parts[3].rstrip("."))
+        if dbm >= -55: return 4
+        if dbm >= -65: return 3
+        if dbm >= -75: return 2
+        return 1
+    except (IndexError, ValueError):
+        return 0
+
+
+def parse_ssid_from_wpa_cli(output):
+    """Extract SSID from wpa_cli status output."""
+    for line in output.splitlines():
+        if line.startswith("ssid="):
+            return line.split("=", 1)[1].strip()
+    return "No signal"
+
+
+def parse_ip_from_addr(output):
+    """Extract first IPv4 address from `ip addr show` output."""
+    m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
+    return m.group(1) if m else ""
