@@ -1,11 +1,12 @@
 SUMMARY = "WiFi credentials and systemd-networkd DHCP config for wlan0"
-PR = "r0"
+PR = "r1"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
 SRC_URI = " \
     file://wpa_supplicant-wlan0.conf \
     file://20-wlan.network \
+    file://10-wlan-rename.link \
 "
 
 S = "${WORKDIR}"
@@ -25,6 +26,11 @@ do_install() {
     install -m 0644 ${S}/20-wlan.network \
         ${D}${sysconfdir}/systemd/network/20-wlan.network
 
+    # Rename rtl8xxxu interface to wlan0 so wpa_supplicant@wlan0 finds it
+    install -d ${D}${sysconfdir}/systemd/network
+    install -m 0644 ${S}/10-wlan-rename.link \
+        ${D}${sysconfdir}/systemd/network/10-wlan-rename.link
+
     # Enable wpa_supplicant@wlan0 by creating the systemd enable symlink.
     # The template unit wpa_supplicant@.service is shipped by wpa-supplicant.
     # This is equivalent to: systemctl enable wpa_supplicant@wlan0
@@ -35,6 +41,7 @@ do_install() {
 
 FILES:${PN} = " \
     ${sysconfdir}/wpa_supplicant/wpa_supplicant-wlan0.conf \
+    ${sysconfdir}/systemd/network/10-wlan-rename.link \
     ${sysconfdir}/systemd/network/20-wlan.network \
     ${sysconfdir}/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service \
 "
