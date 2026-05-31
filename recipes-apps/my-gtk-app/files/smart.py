@@ -2,7 +2,7 @@
 """Smart Home Dashboard — STM32MP157D-DK1 · 800×480 · Wayland/Weston"""
 
 import math, sys, platform, argparse, threading, datetime, json, re, subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from urllib import request as _urllib_request
 
 import gi
