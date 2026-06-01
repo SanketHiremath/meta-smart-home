@@ -187,3 +187,164 @@ def _wifi_ip():
         return parse_ip_from_addr(out)
     except Exception:
         return ""
+
+# ── GTK helpers ────────────────────────────────────────────────────────────────
+def _rgba(r, g, b, a=1.0):
+    c = Gdk.RGBA(); c.red = r; c.green = g; c.blue = b; c.alpha = a; return c
+
+def _css(widget, data):
+    p = Gtk.CssProvider()
+    p.load_from_data(data.encode())
+    widget.get_style_context().add_provider(
+        p, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+def lbl(text, size=11, bold=False, color=None, wrap=False, xalign=0.0):
+    l = Gtk.Label(label=text)
+    l.set_xalign(xalign)
+    l.modify_font(Pango.FontDescription(
+        "Sans {} {}".format("Bold" if bold else "Regular", size)))
+    l.override_color(Gtk.StateFlags.NORMAL, _rgba(*(color or T_LIGHT)))
+    if wrap:
+        l.set_line_wrap(True)
+        l.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    return l
+
+def _vbox(mt=8, mb=8, ml=10, mr=10, sp=4):
+    b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=sp)
+    b.set_margin_top(mt); b.set_margin_bottom(mb)
+    b.set_margin_start(ml); b.set_margin_end(mr)
+    return b
+
+def _hbox(sp=6):
+    return Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=sp)
+
+
+class Card(Gtk.DrawingArea):
+    """Rounded dark rectangle with soft drop-shadow, used as Overlay base."""
+    RADIUS = 12
+
+    def __init__(self, bg=CARD_DARK):
+        super().__init__()
+        self._bg = bg
+        self.connect("draw", self._draw)
+
+    def _rrect(self, cr, x, y, w, h, r):
+        cr.new_sub_path()
+        cr.arc(x+w-r, y+r,   r, -math.pi/2,  0)
+        cr.arc(x+w-r, y+h-r, r,  0,           math.pi/2)
+        cr.arc(x+r,   y+h-r, r,  math.pi/2,   math.pi)
+        cr.arc(x+r,   y+r,   r,  math.pi,    -math.pi/2)
+        cr.close_path()
+
+    def _draw(self, w, cr):
+        W = w.get_allocated_width()
+        H = w.get_allocated_height()
+        r = self.RADIUS
+        for i in range(4, 0, -1):
+            cr.set_source_rgba(0, 0, 0, 0.03 * i)
+            self._rrect(cr, 1, 1+i, W-2, H-3, r)
+            cr.fill()
+        cr.set_source_rgb(*self._bg)
+        self._rrect(cr, 1, 1, W-2, H-3, r)
+        cr.fill()
+
+
+def overlay_card(bg=CARD_DARK, child=None):
+    ov = Gtk.Overlay()
+    ov.add(Card(bg))
+    if child:
+        ov.add_overlay(child)
+        ov.set_overlay_pass_through(child, True)
+    return ov
+
+class _RingArc(Gtk.DrawingArea):
+    """Teal ring arc showing humidity %. Draws value text in the centre."""
+    def __init__(self, value=62, size=80):
+        super().__init__()
+        self.value = value
+        self.set_size_request(size, size)
+        self.connect("draw", self._draw)
+
+    def _draw(self, w, cr):
+        W = w.get_allocated_width()
+        H = w.get_allocated_height()
+        cx, cy = W / 2, H / 2
+        R  = min(W, H) / 2 - 8
+        a0 = math.pi * 0.75
+        a1 = math.pi * 2.25
+        av = a0 + (self.value / 100.0) * (a1 - a0)
+
+        cr.set_line_width(6)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+
+        cr.set_source_rgba(0.25, 0.22, 0.20, 1)   # track
+        cr.arc(cx, cy, R, a0, a1); cr.stroke()
+
+        cr.set_source_rgb(*ACCENT)                  # filled arc
+        cr.arc(cx, cy, R, a0, av); cr.stroke()
+
+        layout = w.create_pango_layout(str(self.value))
+        layout.set_font_description(Pango.FontDescription("Sans Bold 18"))
+        lw, lh = layout.get_pixel_size()
+        cr.set_source_rgb(*T_LIGHT)
+        cr.move_to(cx - lw / 2, cy - lh / 2)
+        PangoCairo.show_layout(cr, layout)
+
+
+class HumidityHero(Gtk.Overlay):
+    """Hero card — humidity ring arc + condition/timestamp labels."""
+
+    def __init__(self):
+        super().__init__()
+        self._ring  = _RingArc(62)
+        self._cond  = lbl("–––",              10, color=T_LIGHT)
+        self._tag   = lbl("",                  9, color=ACCENT)
+        self._stamp = lbl("Updating…",         8, color=T_DIM)
+
+        outer = _hbox(12)
+        outer.set_margin_start(14); outer.set_margin_end(14)
+        outer.set_margin_top(8);    outer.set_margin_bottom(8)
+
+        # Left — ring + "% RH" label
+        ring_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        ring_col.set_valign(Gtk.Align.CENTER)
+        pct = lbl("% RH", 8, color=ACCENT)
+        pct.set_halign(Gtk.Align.CENTER)
+        ring_col.pack_start(self._ring, False, False, 0)
+        ring_col.pack_start(pct,        False, False, 0)
+        outer.pack_start(ring_col, False, False, 0)
+
+        # Right — title + location + condition + tag/stamp row
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        info.set_valign(Gtk.Align.CENTER)
+        info.pack_start(lbl("Humidity", 14, bold=True, color=T_LIGHT), False, False, 0)
+        info.pack_start(lbl("Indianapolis, IN", 9, color=T_DIM),       False, False, 0)
+        info.pack_start(self._cond,                                      False, False, 0)
+        row = _hbox(8)
+        row.pack_start(self._tag,   False, False, 0)
+        row.pack_start(self._stamp, False, False, 0)
+        info.pack_start(row, False, False, 0)
+        outer.pack_start(info, True, True, 0)
+
+        self.add(Card(CARD_DARK))
+        self.add_overlay(outer)
+        self.set_overlay_pass_through(outer, True)
+
+    def update(self, data):
+        if data is None:
+            self._stamp.set_text("Network error")
+            return
+        self._ring.value = data.humidity
+        self._ring.queue_draw()
+        self._cond.set_text(data.condition)
+        suffix = "  (cached)" if data.cached else ""
+        self._stamp.set_text("Updated {}{}".format(data.fetched_at, suffix))
+        h = data.humidity
+        if h < 30:
+            tag, col = "● Dry",          (0.88, 0.75, 0.40)
+        elif h < 60:
+            tag, col = "● Comfortable",  ACCENT
+        else:
+            tag, col = "● Humid",        (0.88, 0.50, 0.40)
+        self._tag.set_text(tag)
+        self._tag.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
