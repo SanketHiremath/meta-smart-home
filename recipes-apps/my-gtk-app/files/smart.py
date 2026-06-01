@@ -2,7 +2,7 @@
 """Smart Home Dashboard — STM32MP157D-DK1 · 800×480 · Wayland/Weston"""
 
 import math, sys, platform, argparse, threading, datetime, json, re, subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as _dc_replace
 from urllib import request as _urllib_request
 
 import gi
@@ -67,6 +67,10 @@ class WeatherData:
     cached:      bool = False
 
 
+def _replace_weather(data, **kwargs):
+    return _dc_replace(data, **kwargs)
+
+
 def parse_weather_response(raw):
     """Parse an Open-Meteo /v1/forecast JSON dict into WeatherData."""
     c = raw["current"]
@@ -122,6 +126,7 @@ class WeatherFetcher:
     def __init__(self, callback):
         self._callback = callback   # callable(WeatherData | None)
         self._last = None
+        self._lock = threading.Lock()
 
     def fetch_async(self):
         threading.Thread(target=self._fetch, daemon=True).start()
@@ -131,19 +136,14 @@ class WeatherFetcher:
             with _urllib_request.urlopen(_METEO_URL, timeout=10) as resp:
                 raw = json.loads(resp.read())
             data = parse_weather_response(raw)
-            self._last = data
+            with self._lock:
+                self._last = data
             GLib.idle_add(self._callback, data)
         except Exception:
-            if self._last is not None:
-                cached = WeatherData(
-                    humidity    = self._last.humidity,
-                    temperature = self._last.temperature,
-                    feels_like  = self._last.feels_like,
-                    uv_index    = self._last.uv_index,
-                    condition   = self._last.condition,
-                    fetched_at  = self._last.fetched_at,
-                    cached      = True,
-                )
+            with self._lock:
+                last = self._last
+            if last is not None:
+                cached = _replace_weather(last, cached=True)
                 GLib.idle_add(self._callback, cached)
             else:
                 GLib.idle_add(self._callback, None)
@@ -170,6 +170,7 @@ def _wifi_bars():
     try:
         with open("/proc/net/wireless") as f:
             for line in f:
+                # wlu1u3 is the RTL8188ETV USB dongle name before the rename link takes effect
                 if "wlan0" in line or "wlu1u3" in line:
                     return parse_signal_bars(line)
     except Exception:
