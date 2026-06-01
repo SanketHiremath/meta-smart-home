@@ -552,3 +552,149 @@ def make_bottom_nav():
         bar.pack_start(btn, True, True, 0)
 
     return bar
+
+
+# ── Main application window ────────────────────────────────────────────────────
+class SmartHomeApp(Gtk.Window):
+
+    def __init__(self):
+        super().__init__(title="Smart Home")
+        if KIOSK:
+            self.set_decorated(False)
+        else:
+            self.set_default_size(800, 480)
+            self.set_decorated(True)
+            self.set_resizable(True)
+
+        p = Gtk.CssProvider()
+        p.load_from_data(
+            "* {{ font-family: Sans; }} window {{ background-color: rgb({},{},{}); }}".format(
+                int(BG[0]*255), int(BG[1]*255), int(BG[2]*255)
+            ).encode()
+        )
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), p, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event",
+                     lambda w, e: Gtk.main_quit() if e.keyval == Gdk.KEY_Escape else None)
+
+        self._build()
+        if KIOSK:
+            self.fullscreen()
+
+        self._fetcher = WeatherFetcher(self._on_weather)
+        self._fetcher.fetch_async()
+        GLib.timeout_add_seconds(1200, self._poll_weather)  # every 20 min
+        self._tick()
+        GLib.timeout_add_seconds(30, self._tick)
+
+    # ── Layout ──────────────────────────────────────────────────────────────
+    def _build(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        root.set_hexpand(True); root.set_vexpand(True)
+        self.add(root)
+
+        # Header
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        hdr.set_margin_start(PAD*2); hdr.set_margin_end(PAD*2)
+        hdr.set_margin_top(8);       hdr.set_margin_bottom(4)
+        hdr.pack_start(lbl("Smart Home", 16, bold=True, color=T_LIGHT), True, True, 0)
+        loc = lbl("📍 Indianapolis, IN", 9, color=ACCENT)
+        _css(loc, "label {{ background: rgba({},{},{},0.12); border-radius:10px; padding:2px 8px; }}".format(
+            int(ACCENT[0]*255), int(ACCENT[1]*255), int(ACCENT[2]*255)))
+        self._clock_lbl = lbl("--:--", 11, color=T_MID)
+        hdr.pack_end(self._clock_lbl, False, False, 0)
+        hdr.pack_end(loc,             False, False, 8)
+        root.pack_start(hdr, False, False, 0)
+
+        # Hero
+        self._hero = HumidityHero()
+        self._hero.set_margin_start(PAD); self._hero.set_margin_end(PAD)
+        self._hero.set_margin_bottom(PAD)
+        root.pack_start(self._hero, False, False, 0)
+
+        # Music strip
+        music = make_music_strip()
+        music.set_margin_start(PAD); music.set_margin_end(PAD)
+        music.set_margin_bottom(PAD)
+        root.pack_start(music, False, False, 0)
+
+        # Tile grid
+        grid = Gtk.Grid()
+        grid.set_column_spacing(PAD)
+        grid.set_margin_start(PAD); grid.set_margin_end(PAD)
+        grid.set_margin_bottom(PAD)
+        grid.set_column_homogeneous(True)
+        grid.set_hexpand(True); grid.set_vexpand(True)
+
+        self._tile_temp = WeatherTile("🌡", "Temperature", TILE_WEATHER,   (0.494, 0.796, 0.494))
+        self._tile_feel = WeatherTile("🌬", "Feels Like",  TILE_FEELSLIKE, (0.878, 0.439, 0.314))
+        self._tile_uv   = WeatherTile("☀",  "UV Index",    TILE_UV,        (0.910, 0.784, 0.251))
+        self._tile_uv.enable_uv_bar()
+        self._tile_wifi = WifiTile()
+
+        for col, tile in enumerate([self._tile_temp, self._tile_feel,
+                                     self._tile_uv,   self._tile_wifi]):
+            tile.set_hexpand(True); tile.set_vexpand(True)
+            grid.attach(tile, col, 0, 1, 1)
+
+        root.pack_start(grid, True, True, 0)
+        root.pack_start(make_bottom_nav(), False, False, 0)
+        self.show_all()
+
+    # ── Timers / callbacks ───────────────────────────────────────────────────
+    def _tick(self):
+        now = datetime.datetime.now()
+        self._clock_lbl.set_text(now.strftime("%H:%M"))
+        ssid, bars, ip = read_wifi_status()
+        self._tile_wifi.update(ssid, bars, ip)
+        return True
+
+    def _poll_weather(self):
+        self._fetcher.fetch_async()
+        return True
+
+    def _on_weather(self, data):
+        self._hero.update(data)
+        if data is None:
+            return False
+        self._tile_temp.update(
+            value="{:.0f}°".format(data.temperature),
+            sub="°F · Open-Meteo",
+            chip="Live",
+        )
+        self._tile_feel.update(
+            value="{:.0f}°".format(data.feels_like),
+            sub="°F apparent",
+            chip="Live",
+        )
+        uv = data.uv_index
+        chip = ("Low" if uv < 3 else "Moderate" if uv < 6 else
+                "High" if uv < 8 else "Very High")
+        self._tile_uv.update(
+            value="{:.1f}".format(uv),
+            sub="Scale 0–11+",
+            chip=chip,
+            uv_val=uv,
+        )
+        return False  # GLib.idle_add one-shot
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    _parser = argparse.ArgumentParser(description="Smart Home Dashboard")
+    _group  = _parser.add_mutually_exclusive_group()
+    _group.add_argument("--kiosk",    action="store_true",
+                        help="Fullscreen, no decorations (auto on Weston)")
+    _group.add_argument("--windowed", action="store_true",
+                        help="Force windowed mode")
+    _args = _parser.parse_args()
+
+    if _args.kiosk:       KIOSK = True
+    elif _args.windowed:  KIOSK = False
+    else:                 KIOSK = _detect_kiosk()
+
+    print("[smart_home] platform={}  kiosk={}".format(platform.system(), KIOSK))
+    SmartHomeApp()
+    Gtk.main()
