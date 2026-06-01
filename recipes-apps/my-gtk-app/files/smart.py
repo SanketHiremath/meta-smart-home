@@ -348,3 +348,117 @@ class HumidityHero(Gtk.Overlay):
             tag, col = "● Humid",        (0.88, 0.50, 0.40)
         self._tag.set_text(tag)
         self._tag.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
+
+
+class WeatherTile(Gtk.Overlay):
+    """Reusable data tile — temperature, feels-like, or UV index."""
+
+    def __init__(self, icon, label, bg, fg):
+        super().__init__()
+        box = _vbox(mt=8, mb=8, ml=9, mr=9, sp=2)
+
+        hdr = _hbox(4)
+        hdr.pack_start(lbl("{} {}".format(icon, label), 8,
+                           color=(fg[0], fg[1], fg[2], 0.55)), False, False, 0)
+        self._chip = lbl("", 7, color=fg)
+        self._chip.set_halign(Gtk.Align.END)
+        hdr.pack_end(self._chip, False, False, 0)
+        box.pack_start(hdr, False, False, 0)
+
+        self._value = lbl("–", 22, bold=True, color=fg)
+        box.pack_start(self._value, True, True, 0)
+
+        self._sub = lbl("", 8, color=T_DIM)
+        box.pack_start(self._sub, False, False, 0)
+
+        self._uv_da    = Gtk.DrawingArea()
+        self._uv_da.set_size_request(-1, 5)
+        self._uv_da.connect("draw", self._draw_uv_bar)
+        self._uv_val   = 0.0
+        self._show_bar = False
+        box.pack_start(self._uv_da, False, False, 0)
+
+        self.add(Card(bg))
+        self.add_overlay(box)
+        self.set_overlay_pass_through(box, True)
+
+    def _draw_uv_bar(self, w, cr):
+        if not self._show_bar:
+            return
+        W = w.get_allocated_width()
+        H = w.get_allocated_height()
+        cr.set_source_rgba(0.25, 0.25, 0.25, 0.5)
+        cr.rectangle(0, 1, W, H - 2); cr.fill()
+        fill_w = min(W, int((self._uv_val / 11.0) * W))
+        if fill_w > 0:
+            grad = cairo.LinearGradient(0, 0, W, 0)
+            grad.add_color_stop_rgb(0.00, 0.494, 0.796, 0.494)  # green
+            grad.add_color_stop_rgb(0.36, 0.910, 0.784, 0.251)  # yellow
+            grad.add_color_stop_rgb(0.64, 0.910, 0.439, 0.251)  # orange
+            grad.add_color_stop_rgb(1.00, 0.878, 0.314, 0.314)  # red
+            cr.set_source(grad)
+            cr.rectangle(0, 1, fill_w, H - 2); cr.fill()
+
+    def enable_uv_bar(self):
+        self._show_bar = True
+
+    def update(self, value, sub, chip, uv_val=0.0):
+        self._value.set_text(value)
+        self._sub.set_text(sub)
+        self._chip.set_text(chip)
+        self._uv_val = uv_val
+        if self._show_bar:
+            self._uv_da.queue_draw()
+
+
+class _SignalBars(Gtk.DrawingArea):
+    def __init__(self):
+        super().__init__()
+        self.bars = 0
+        self.set_size_request(44, 16)
+        self.connect("draw", self._draw)
+
+    def _draw(self, w, cr):
+        for i, h in enumerate([4, 7, 10, 14]):
+            x = 2 + i * 10
+            if i < self.bars:
+                cr.set_source_rgb(*ACCENT)
+            else:
+                cr.set_source_rgba(*ACCENT, 0.2)
+            cr.rectangle(x, 16 - h, 7, h)
+            cr.fill()
+
+
+class WifiTile(Gtk.Overlay):
+    def __init__(self):
+        super().__init__()
+        box = _vbox(mt=8, mb=8, ml=9, mr=9, sp=2)
+
+        hdr = _hbox(4)
+        hdr.pack_start(lbl("▲ WiFi", 8,
+                           color=(TILE_WIFI[0]+0.3, TILE_WIFI[1]+0.4, TILE_WIFI[2]+0.4, 0.7)),
+                       False, False, 0)
+        self._chip = lbl("On", 7, color=ACCENT)
+        self._chip.set_halign(Gtk.Align.END)
+        hdr.pack_end(self._chip, False, False, 0)
+        box.pack_start(hdr, False, False, 0)
+
+        self._ssid = lbl("–", 13, bold=True, color=ACCENT)
+        box.pack_start(self._ssid, True, True, 0)
+
+        self._bars = _SignalBars()
+        box.pack_start(self._bars, False, False, 0)
+
+        self._ip = lbl("", 8, color=T_DIM)
+        box.pack_start(self._ip, False, False, 0)
+
+        self.add(Card(TILE_WIFI))
+        self.add_overlay(box)
+        self.set_overlay_pass_through(box, True)
+
+    def update(self, ssid, bars, ip):
+        self._ssid.set_text(ssid)
+        self._bars.bars = bars
+        self._bars.queue_draw()
+        self._ip.set_text(ip)
+        self._chip.set_text("On" if bars > 0 else "Off")
