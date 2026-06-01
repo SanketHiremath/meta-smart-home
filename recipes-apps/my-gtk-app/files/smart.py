@@ -462,3 +462,93 @@ class WifiTile(Gtk.Overlay):
         self._bars.queue_draw()
         self._ip.set_text(ip)
         self._chip.set_text("On" if bars > 0 else "Off")
+
+
+# ── Music strip (static) ───────────────────────────────────────────────────────
+def make_music_strip():
+    box = _hbox(10)
+    box.set_margin_start(12); box.set_margin_end(12)
+    box.set_margin_top(6);    box.set_margin_bottom(6)
+
+    art = Gtk.DrawingArea()
+    art.set_size_request(36, 36)
+    def _draw_art(w, cr):
+        cr.set_source_rgb(0.22, 0.28, 0.20); cr.arc(18, 18, 18, 0, 2*math.pi); cr.fill()
+        cr.set_source_rgb(0.15, 0.20, 0.14); cr.arc(18, 18,  8, 0, 2*math.pi); cr.fill()
+        cr.set_source_rgb(0.22, 0.28, 0.20); cr.arc(18, 18,  3, 0, 2*math.pi); cr.fill()
+        cr.set_source_rgba(1, 1, 1, 0.10);   cr.arc(18, 18, 13, 0, 2*math.pi); cr.stroke()
+    art.connect("draw", _draw_art)
+    box.pack_start(art, False, False, 0)
+
+    meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+    meta.set_valign(Gtk.Align.CENTER)
+    meta.pack_start(lbl("Sentimental Value", 8, color=T_DIM), False, False, 0)
+    track = lbl("Hana Rani — Lighter and Lighter", 10, bold=True, wrap=True)
+    track.set_max_width_chars(32)
+    meta.pack_start(track, False, False, 0)
+    prog = Gtk.DrawingArea(); prog.set_size_request(-1, 3)
+    def _draw_prog(w, cr):
+        W = w.get_allocated_width()
+        cr.set_source_rgba(*T_DIM, 0.4); cr.rectangle(0, 0, W, 3); cr.fill()
+        cr.set_source_rgb(*ACCENT);      cr.rectangle(0, 0, int(W*0.4), 3); cr.fill()
+    prog.connect("draw", _draw_prog)
+    meta.pack_start(prog, False, False, 2)
+    box.pack_start(meta, True, True, 0)
+
+    css_ctrl = """
+        button { background:transparent; border:none; font-size:14px;
+                 min-width:28px; min-height:28px; color:#8a8070; border-radius:50%; }
+        button.play { background:#2ec4b6; color:#111; border-radius:50%; }
+        button:hover { background:rgba(255,255,255,0.08); }
+        button.play:hover { background:#3ad4c6; }
+    """
+    ctrl = _hbox(8)
+    ctrl.set_valign(Gtk.Align.CENTER)
+    for sym, cls in [("⏮", ""), ("▶", "play"), ("⏭", "")]:
+        b = Gtk.Button(label=sym)
+        _css(b, css_ctrl)
+        if cls:
+            b.get_style_context().add_class(cls)
+        b.set_relief(Gtk.ReliefStyle.NONE)
+        b.set_sensitive(False)
+        ctrl.pack_start(b, False, False, 0)
+    box.pack_start(ctrl, False, False, 0)
+
+    return overlay_card(CARD_DARK, box)
+
+
+# ── Bottom navigation (static stubs) ──────────────────────────────────────────
+def make_bottom_nav():
+    bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+    _css(bar, "* {{ background: rgb({},{},{}); }}".format(
+        int(NAV_BG[0]*255), int(NAV_BG[1]*255), int(NAV_BG[2]*255)))
+
+    for icon, name, active in [
+        ("⌂", "Home",     True),
+        ("⚡", "Energy",   False),
+        ("🌡", "Climate",  False),
+        ("✉",  "Alerts",   False),
+        ("⚙",  "Settings", False),
+    ]:
+        col = ACCENT if active else T_DIM
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        inner.set_halign(Gtk.Align.CENTER)
+        ic = Gtk.Label(label=icon)
+        ic.modify_font(Pango.FontDescription("Sans 14"))
+        ic.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
+        nm = Gtk.Label(label=name)
+        nm.modify_font(Pango.FontDescription("Sans 7"))
+        nm.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
+        inner.pack_start(ic, False, False, 0)
+        inner.pack_start(nm, False, False, 0)
+        btn = Gtk.Button()
+        btn.add(inner)
+        btn.set_relief(Gtk.ReliefStyle.NONE)
+        btn.set_sensitive(False)
+        _css(btn, """
+            button { background:transparent; border:none; border-radius:8px;
+                     padding:4px 6px; min-height:40px; }
+        """)
+        bar.pack_start(btn, True, True, 0)
+
+    return bar
