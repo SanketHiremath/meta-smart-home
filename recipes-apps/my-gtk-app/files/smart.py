@@ -117,7 +117,6 @@ _METEO_URL = (
     "?latitude=39.7684&longitude=-86.1581"
     "&current=relativehumidity_2m,temperature_2m,apparent_temperature"
     ",uv_index,weathercode"
-    "&temperature_unit=fahrenheit"
     "&timezone=America%2FIndiana%2FIndianapolis"
 )
 
@@ -284,7 +283,7 @@ class _RingArc(Gtk.DrawingArea):
         cr.arc(cx, cy, R, a0, av); cr.stroke()
 
         layout = w.create_pango_layout(str(self.value))
-        layout.set_font_description(Pango.FontDescription("Sans Bold 18"))
+        layout.set_font_description(Pango.FontDescription("Sans Bold 22"))
         lw, lh = layout.get_pixel_size()
         cr.set_source_rgb(*T_LIGHT)
         cr.move_to(cx - lw / 2, cy - lh / 2)
@@ -296,19 +295,19 @@ class HumidityHero(Gtk.Overlay):
 
     def __init__(self):
         super().__init__()
-        self._ring  = _RingArc(62)
-        self._cond  = lbl("–––",              10, color=T_LIGHT)
-        self._tag   = lbl("",                  9, color=ACCENT)
-        self._stamp = lbl("Updating…",         8, color=T_DIM)
+        self._ring  = _RingArc(62, size=70)
+        self._cond  = lbl("–––",              13, color=T_LIGHT)
+        self._tag   = lbl("",                  11, color=ACCENT)
+        self._stamp = lbl("Updating…",         10, color=T_DIM)
 
         outer = _hbox(12)
         outer.set_margin_start(14); outer.set_margin_end(14)
-        outer.set_margin_top(8);    outer.set_margin_bottom(8)
+        outer.set_margin_top(6);    outer.set_margin_bottom(6)
 
         # Left — ring + "% RH" label
         ring_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         ring_col.set_valign(Gtk.Align.CENTER)
-        pct = lbl("% RH", 8, color=ACCENT)
+        pct = lbl("% RH", 10, color=ACCENT)
         pct.set_halign(Gtk.Align.CENTER)
         ring_col.pack_start(self._ring, False, False, 0)
         ring_col.pack_start(pct,        False, False, 0)
@@ -317,8 +316,8 @@ class HumidityHero(Gtk.Overlay):
         # Right — title + location + condition + tag/stamp row
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         info.set_valign(Gtk.Align.CENTER)
-        info.pack_start(lbl("Humidity", 14, bold=True, color=T_LIGHT), False, False, 0)
-        info.pack_start(lbl("Indianapolis, IN", 9, color=T_DIM),       False, False, 0)
+        info.pack_start(lbl("Humidity", 18, bold=True, color=T_LIGHT), False, False, 0)
+        info.pack_start(lbl("Indianapolis, IN", 11, color=T_DIM),      False, False, 0)
         info.pack_start(self._cond,                                      False, False, 0)
         row = _hbox(8)
         row.pack_start(self._tag,   False, False, 0)
@@ -468,7 +467,7 @@ class WifiTile(Gtk.Overlay):
 def make_music_strip():
     box = _hbox(10)
     box.set_margin_start(12); box.set_margin_end(12)
-    box.set_margin_top(6);    box.set_margin_bottom(6)
+    box.set_margin_top(4);    box.set_margin_bottom(4)
 
     art = Gtk.DrawingArea()
     art.set_size_request(36, 36)
@@ -482,8 +481,8 @@ def make_music_strip():
 
     meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     meta.set_valign(Gtk.Align.CENTER)
-    meta.pack_start(lbl("Sentimental Value", 8, color=T_DIM), False, False, 0)
-    track = lbl("Hana Rani — Lighter and Lighter", 10, bold=True, wrap=True)
+    meta.pack_start(lbl("Sentimental Value", 10, color=T_DIM), False, False, 0)
+    track = lbl("Hana Rani — Lighter and Lighter", 13, bold=True, wrap=True)
     track.set_max_width_chars(32)
     meta.pack_start(track, False, False, 0)
     prog = Gtk.DrawingArea(); prog.set_size_request(-1, 3)
@@ -496,8 +495,8 @@ def make_music_strip():
     box.pack_start(meta, True, True, 0)
 
     css_ctrl = """
-        button { background:transparent; border:none; font-size:14px;
-                 min-width:28px; min-height:28px; color:#8a8070; border-radius:50%; }
+        button { background:transparent; border:none; font-size:16px;
+                 min-width:32px; min-height:32px; color:#8a8070; border-radius:50%; }
         button.play { background:#2ec4b6; color:#111; border-radius:50%; }
         button:hover { background:rgba(255,255,255,0.08); }
         button.play:hover { background:#3ad4c6; }
@@ -534,10 +533,10 @@ def make_bottom_nav():
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         inner.set_halign(Gtk.Align.CENTER)
         ic = Gtk.Label(label=icon)
-        ic.modify_font(Pango.FontDescription("Sans 14"))
+        ic.modify_font(Pango.FontDescription("Sans 16"))
         ic.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
         nm = Gtk.Label(label=name)
-        nm.modify_font(Pango.FontDescription("Sans 7"))
+        nm.modify_font(Pango.FontDescription("Sans 10"))
         nm.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
         inner.pack_start(ic, False, False, 0)
         inner.pack_start(nm, False, False, 0)
@@ -547,7 +546,7 @@ def make_bottom_nav():
         btn.set_sensitive(False)
         _css(btn, """
             button { background:transparent; border:none; border-radius:8px;
-                     padding:4px 6px; min-height:40px; }
+                     padding:4px 6px; min-height:50px; }
         """)
         bar.pack_start(btn, True, True, 0)
 
@@ -598,35 +597,38 @@ class SmartHomeApp(Gtk.Window):
         # Header
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         hdr.set_margin_start(PAD*2); hdr.set_margin_end(PAD*2)
-        hdr.set_margin_top(8);       hdr.set_margin_bottom(4)
-        hdr.pack_start(lbl("Smart Home", 16, bold=True, color=T_LIGHT), True, True, 0)
-        loc = lbl("📍 Indianapolis, IN", 9, color=ACCENT)
+        hdr.set_margin_top(8);       hdr.set_margin_bottom(5)
+        hdr.pack_start(lbl("Smart Home", 20, bold=True, color=T_LIGHT), True, True, 0)
+        loc = lbl("📍 Indianapolis, IN", 11, color=ACCENT)
         _css(loc, "label {{ background: rgba({},{},{},0.12); border-radius:10px; padding:2px 8px; }}".format(
             int(ACCENT[0]*255), int(ACCENT[1]*255), int(ACCENT[2]*255)))
-        self._clock_lbl = lbl("--:--", 11, color=T_MID)
+        self._clock_lbl = lbl("--:--", 14, color=T_MID)
         hdr.pack_end(self._clock_lbl, False, False, 0)
         hdr.pack_end(loc,             False, False, 8)
         root.pack_start(hdr, False, False, 0)
 
-        # Hero
+        # Hero — explicit height so GTK doesn't squish it against the tile grid
         self._hero = HumidityHero()
+        self._hero.set_size_request(-1, 148)
         self._hero.set_margin_start(PAD); self._hero.set_margin_end(PAD)
         self._hero.set_margin_bottom(PAD)
         root.pack_start(self._hero, False, False, 0)
 
-        # Music strip
+        # Music strip — explicit height for the same reason
         music = make_music_strip()
+        music.set_size_request(-1, 66)
         music.set_margin_start(PAD); music.set_margin_end(PAD)
         music.set_margin_bottom(PAD)
         root.pack_start(music, False, False, 0)
 
-        # Tile grid
+        # Tile grid — cap height so tiles don't swallow the screen
         grid = Gtk.Grid()
         grid.set_column_spacing(PAD)
         grid.set_margin_start(PAD); grid.set_margin_end(PAD)
         grid.set_margin_bottom(PAD)
         grid.set_column_homogeneous(True)
         grid.set_hexpand(True); grid.set_vexpand(True)
+        grid.set_size_request(-1, 175)
 
         self._tile_temp = WeatherTile("🌡", "Temperature", TILE_WEATHER,   (0.494, 0.796, 0.494))
         self._tile_feel = WeatherTile("🌬", "Feels Like",  TILE_FEELSLIKE, (0.878, 0.439, 0.314))
@@ -660,13 +662,13 @@ class SmartHomeApp(Gtk.Window):
         if data is None:
             return False
         self._tile_temp.update(
-            value="{:.0f}°".format(data.temperature),
-            sub="°F · Open-Meteo",
+            value="{:.1f}°".format(data.temperature),
+            sub="°C · Open-Meteo",
             chip="Live",
         )
         self._tile_feel.update(
-            value="{:.0f}°".format(data.feels_like),
-            sub="°F apparent",
+            value="{:.1f}°".format(data.feels_like),
+            sub="°C apparent",
             chip="Live",
         )
         uv = data.uv_index

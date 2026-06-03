@@ -14,4 +14,4 @@ while [ $i -lt 30 ]; do
     i=$((i + 1))
 done
 
-exec /usr/bin/python3 /opt/my-gtk-app/my_app.py
+exec /usr/bin/python3 /opt/my-gtk-app/smart.py --kiosk
