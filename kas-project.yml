@@ -41,6 +41,14 @@ repos:
     branch: scarthgap
     commit: 993e43adedbfe95dca8e93a64ec091a83a604633
 
+  # Custom smart-home layer — app recipes, bbappends, WiFi config
+  meta-smart-home:
+    url: https://github.com/SanketHiremath/meta-smart-home.git
+    branch: main
+    commit: ae269f8e657b2477ca5d48d72452b945f9f2623e
+    layers:
+      meta-smart-home:
+
 local_conf_header:
   # ── Hardware & distro ────────────────────────────────────────────────────
   main: |
