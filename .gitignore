@@ -6,3 +6,4 @@ __pycache__/
 # BitBake / Yocto build artefacts (never in a layer)
 *.lock
 *.log
+docs/superpowers/
