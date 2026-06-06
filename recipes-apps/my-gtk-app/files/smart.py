@@ -500,28 +500,22 @@ class WifiTile(Gtk.Overlay):
 
 _ICONS_DIR = "/opt/my-gtk-app/icons"
 _NAV_ITEMS = [
-    ("home.svg",    "Home",     True),
-    ("energy.svg",  "Energy",   False),
-    ("weather.svg", "Climate",  False),
-    ("alert.svg",   "Alerts",   False),
-    ("setting.svg", "Settings", False),
+    ("home.png",    "Home",     True),
+    ("energy.png",  "Energy",   False),
+    ("weather.png", "Climate",  False),
+    ("alert.png",   "Alerts",   False),
+    ("setting.png", "Settings", False),
 ]
 
 def _nav_icon(filename, size, active):
-    """Load an SVG nav icon as a tinted GtkImage. Falls back to a text label."""
+    """Load a PNG nav icon scaled to size. Falls back to a text label."""
     path = "{}/{}".format(_ICONS_DIR, filename)
     try:
         pb = GdkPixbuf.Pixbuf.new_from_file_at_size(path, size, size)
-        # Tint: replace all pixels' alpha; active = accent colour, inactive = dim
-        col = ACCENT if active else T_DIM
-        tinted = pb.copy()
-        pb.saturate_and_pixelate(tinted, 0, False)   # desaturate
-        img = Gtk.Image.new_from_pixbuf(tinted)
-        img.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
-        return img
-    except Exception:
-        lbl_txt = filename.replace(".svg", "")
-        lb = Gtk.Label(label=lbl_txt)
+        return Gtk.Image.new_from_pixbuf(pb)
+    except Exception as e:
+        print("[icons] failed to load {}: {}".format(filename, e), flush=True)
+        lb = Gtk.Label(label=filename.replace(".png", ""))
         lb.modify_font(Pango.FontDescription("Sans {}".format(size)))
         lb.override_color(Gtk.StateFlags.NORMAL, _rgba(*(ACCENT if active else T_DIM)))
         return lb
