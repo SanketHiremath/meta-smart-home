@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Smart Home Dashboard — STM32MP157D-DK1 · 800×480 · Wayland/Weston"""
 
-import math, sys, platform, argparse, threading, datetime, json, re, subprocess
+import math, sys, platform, argparse, threading, datetime, json, re, subprocess, ssl, os
 from dataclasses import dataclass, replace as _dc_replace
 from urllib import request as _urllib_request
 
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("PangoCairo", "1.0")
-from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, GdkPixbuf
 import cairo
 
 # ── Kiosk detection ────────────────────────────────────────────────────────────
@@ -155,14 +156,19 @@ class WeatherFetcher:
         threading.Thread(target=self._fetch, daemon=True).start()
 
     def _fetch(self):
+        # Embedded boards often lack a CA bundle — skip SSL verification.
+        _ctx = ssl.create_default_context()
+        _ctx.check_hostname = False
+        _ctx.verify_mode = ssl.CERT_NONE
         try:
-            with _urllib_request.urlopen(_METEO_URL, timeout=10) as resp:
+            with _urllib_request.urlopen(_METEO_URL, timeout=15, context=_ctx) as resp:
                 raw = json.loads(resp.read())
             data = parse_weather_response(raw)
             with self._lock:
                 self._last = data
             GLib.idle_add(self._callback, data)
-        except Exception:
+        except Exception as e:
+            print("[weather] fetch error: {} — {}".format(type(e).__name__, e), flush=True)
             with self._lock:
                 last = self._last
             if last is not None:
@@ -492,29 +498,50 @@ class WifiTile(Gtk.Overlay):
         self._chip.set_text("On" if bars > 0 else "Off")
 
 
+_ICONS_DIR = "/opt/my-gtk-app/icons"
+_NAV_ITEMS = [
+    ("home.svg",    "Home",     True),
+    ("energy.svg",  "Energy",   False),
+    ("weather.svg", "Climate",  False),
+    ("alert.svg",   "Alerts",   False),
+    ("setting.svg", "Settings", False),
+]
+
+def _nav_icon(filename, size, active):
+    """Load an SVG nav icon as a tinted GtkImage. Falls back to a text label."""
+    path = "{}/{}".format(_ICONS_DIR, filename)
+    try:
+        pb = GdkPixbuf.Pixbuf.new_from_file_at_size(path, size, size)
+        # Tint: replace all pixels' alpha; active = accent colour, inactive = dim
+        col = ACCENT if active else T_DIM
+        tinted = pb.copy()
+        pb.saturate_and_pixelate(tinted, 0, False)   # desaturate
+        img = Gtk.Image.new_from_pixbuf(tinted)
+        img.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
+        return img
+    except Exception:
+        lbl_txt = filename.replace(".svg", "")
+        lb = Gtk.Label(label=lbl_txt)
+        lb.modify_font(Pango.FontDescription("Sans {}".format(size)))
+        lb.override_color(Gtk.StateFlags.NORMAL, _rgba(*(ACCENT if active else T_DIM)))
+        return lb
+
 # ── Bottom navigation (static stubs) ──────────────────────────────────────────
 def make_bottom_nav():
     bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
     _css(bar, "* {{ background: rgb({},{},{}); }}".format(
         int(NAV_BG[0]*255), int(NAV_BG[1]*255), int(NAV_BG[2]*255)))
 
-    for icon, name, active in [
-        ("⌂", "Home",     True),
-        ("⚡", "Energy",   False),
-        ("🌡", "Climate",  False),
-        ("✉",  "Alerts",   False),
-        ("⚙",  "Settings", False),
-    ]:
+    icon_size = _s(28)
+    for svg, name, active in _NAV_ITEMS:
         col = ACCENT if active else T_DIM
-        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=_s(2))
         inner.set_halign(Gtk.Align.CENTER)
-        ic = Gtk.Label(label=icon)
-        ic.modify_font(Pango.FontDescription("Sans {}".format(_s(19))))
-        ic.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
+        inner.set_valign(Gtk.Align.CENTER)
+        inner.pack_start(_nav_icon(svg, icon_size, active), False, False, 0)
         nm = Gtk.Label(label=name)
         nm.modify_font(Pango.FontDescription("Sans {}".format(_s(13))))
         nm.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
-        inner.pack_start(ic, False, False, 0)
         inner.pack_start(nm, False, False, 0)
         btn = Gtk.Button()
         btn.add(inner)
@@ -629,6 +656,7 @@ class SmartHomeApp(Gtk.Window):
     def _on_weather(self, data):
         self._hero.update(data)
         if data is None:
+            GLib.timeout_add_seconds(60, self._poll_weather)  # retry sooner on failure
             return False
         self._tile_temp.update(
             value="{:.1f}°".format(data.temperature),
