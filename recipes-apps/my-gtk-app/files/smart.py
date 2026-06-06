@@ -283,7 +283,7 @@ class _RingArc(Gtk.DrawingArea):
         cr.arc(cx, cy, R, a0, av); cr.stroke()
 
         layout = w.create_pango_layout(str(self.value))
-        layout.set_font_description(Pango.FontDescription("Sans Bold 22"))
+        layout.set_font_description(Pango.FontDescription("Sans Bold 25"))
         lw, lh = layout.get_pixel_size()
         cr.set_source_rgb(*T_LIGHT)
         cr.move_to(cx - lw / 2, cy - lh / 2)
@@ -296,9 +296,9 @@ class HumidityHero(Gtk.Overlay):
     def __init__(self):
         super().__init__()
         self._ring  = _RingArc(62, size=70)
-        self._cond  = lbl("–––",              13, color=T_LIGHT)
-        self._tag   = lbl("",                  11, color=ACCENT)
-        self._stamp = lbl("Updating…",         10, color=T_DIM)
+        self._cond  = lbl("–––",              16, color=T_LIGHT)
+        self._tag   = lbl("",                  14, color=ACCENT)
+        self._stamp = lbl("Updating…",         13, color=T_DIM)
 
         outer = _hbox(12)
         outer.set_margin_start(14); outer.set_margin_end(14)
@@ -307,7 +307,7 @@ class HumidityHero(Gtk.Overlay):
         # Left — ring + "% RH" label
         ring_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         ring_col.set_valign(Gtk.Align.CENTER)
-        pct = lbl("% RH", 10, color=ACCENT)
+        pct = lbl("% RH", 13, color=ACCENT)
         pct.set_halign(Gtk.Align.CENTER)
         ring_col.pack_start(self._ring, False, False, 0)
         ring_col.pack_start(pct,        False, False, 0)
@@ -316,8 +316,8 @@ class HumidityHero(Gtk.Overlay):
         # Right — title + location + condition + tag/stamp row
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         info.set_valign(Gtk.Align.CENTER)
-        info.pack_start(lbl("Humidity", 18, bold=True, color=T_LIGHT), False, False, 0)
-        info.pack_start(lbl("Indianapolis, IN", 11, color=T_DIM),      False, False, 0)
+        info.pack_start(lbl("Humidity", 21, bold=True, color=T_LIGHT), False, False, 0)
+        info.pack_start(lbl("Indianapolis, IN", 14, color=T_DIM),      False, False, 0)
         info.pack_start(self._cond,                                      False, False, 0)
         row = _hbox(8)
         row.pack_start(self._tag,   False, False, 0)
@@ -357,17 +357,17 @@ class WeatherTile(Gtk.Overlay):
         box = _vbox(mt=8, mb=8, ml=9, mr=9, sp=2)
 
         hdr = _hbox(4)
-        hdr.pack_start(lbl("{} {}".format(icon, label), 8,
+        hdr.pack_start(lbl("{} {}".format(icon, label), 11,
                            color=(fg[0], fg[1], fg[2], 0.55)), False, False, 0)
-        self._chip = lbl("", 7, color=fg)
+        self._chip = lbl("", 10, color=fg)
         self._chip.set_halign(Gtk.Align.END)
         hdr.pack_end(self._chip, False, False, 0)
         box.pack_start(hdr, False, False, 0)
 
-        self._value = lbl("–", 22, bold=True, color=fg)
+        self._value = lbl("–", 25, bold=True, color=fg)
         box.pack_start(self._value, True, True, 0)
 
-        self._sub = lbl("", 8, color=T_DIM)
+        self._sub = lbl("", 11, color=T_DIM)
         box.pack_start(self._sub, False, False, 0)
 
         self._uv_da    = Gtk.DrawingArea()
@@ -434,21 +434,21 @@ class WifiTile(Gtk.Overlay):
         box = _vbox(mt=8, mb=8, ml=9, mr=9, sp=2)
 
         hdr = _hbox(4)
-        hdr.pack_start(lbl("▲ WiFi", 8,
+        hdr.pack_start(lbl("▲ WiFi", 11,
                            color=(TILE_WIFI[0]+0.3, TILE_WIFI[1]+0.4, TILE_WIFI[2]+0.4, 0.7)),
                        False, False, 0)
-        self._chip = lbl("On", 7, color=ACCENT)
+        self._chip = lbl("On", 10, color=ACCENT)
         self._chip.set_halign(Gtk.Align.END)
         hdr.pack_end(self._chip, False, False, 0)
         box.pack_start(hdr, False, False, 0)
 
-        self._ssid = lbl("–", 13, bold=True, color=ACCENT)
+        self._ssid = lbl("–", 16, bold=True, color=ACCENT)
         box.pack_start(self._ssid, True, True, 0)
 
         self._bars = _SignalBars()
         box.pack_start(self._bars, False, False, 0)
 
-        self._ip = lbl("", 8, color=T_DIM)
+        self._ip = lbl("", 11, color=T_DIM)
         box.pack_start(self._ip, False, False, 0)
 
         self.add(Card(TILE_WIFI))
@@ -461,59 +461,6 @@ class WifiTile(Gtk.Overlay):
         self._bars.queue_draw()
         self._ip.set_text(ip)
         self._chip.set_text("On" if bars > 0 else "Off")
-
-
-# ── Music strip (static) ───────────────────────────────────────────────────────
-def make_music_strip():
-    box = _hbox(10)
-    box.set_margin_start(12); box.set_margin_end(12)
-    box.set_margin_top(4);    box.set_margin_bottom(4)
-
-    art = Gtk.DrawingArea()
-    art.set_size_request(36, 36)
-    def _draw_art(w, cr):
-        cr.set_source_rgb(0.22, 0.28, 0.20); cr.arc(18, 18, 18, 0, 2*math.pi); cr.fill()
-        cr.set_source_rgb(0.15, 0.20, 0.14); cr.arc(18, 18,  8, 0, 2*math.pi); cr.fill()
-        cr.set_source_rgb(0.22, 0.28, 0.20); cr.arc(18, 18,  3, 0, 2*math.pi); cr.fill()
-        cr.set_source_rgba(1, 1, 1, 0.10);   cr.arc(18, 18, 13, 0, 2*math.pi); cr.stroke()
-    art.connect("draw", _draw_art)
-    box.pack_start(art, False, False, 0)
-
-    meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-    meta.set_valign(Gtk.Align.CENTER)
-    meta.pack_start(lbl("Sentimental Value", 10, color=T_DIM), False, False, 0)
-    track = lbl("Hana Rani — Lighter and Lighter", 13, bold=True, wrap=True)
-    track.set_max_width_chars(32)
-    meta.pack_start(track, False, False, 0)
-    prog = Gtk.DrawingArea(); prog.set_size_request(-1, 3)
-    def _draw_prog(w, cr):
-        W = w.get_allocated_width()
-        cr.set_source_rgba(*T_DIM, 0.4); cr.rectangle(0, 0, W, 3); cr.fill()
-        cr.set_source_rgb(*ACCENT);      cr.rectangle(0, 0, int(W*0.4), 3); cr.fill()
-    prog.connect("draw", _draw_prog)
-    meta.pack_start(prog, False, False, 2)
-    box.pack_start(meta, True, True, 0)
-
-    css_ctrl = """
-        button { background:transparent; border:none; font-size:16px;
-                 min-width:32px; min-height:32px; color:#8a8070; border-radius:50%; }
-        button.play { background:#2ec4b6; color:#111; border-radius:50%; }
-        button:hover { background:rgba(255,255,255,0.08); }
-        button.play:hover { background:#3ad4c6; }
-    """
-    ctrl = _hbox(8)
-    ctrl.set_valign(Gtk.Align.CENTER)
-    for sym, cls in [("⏮", ""), ("▶", "play"), ("⏭", "")]:
-        b = Gtk.Button(label=sym)
-        _css(b, css_ctrl)
-        if cls:
-            b.get_style_context().add_class(cls)
-        b.set_relief(Gtk.ReliefStyle.NONE)
-        b.set_sensitive(False)
-        ctrl.pack_start(b, False, False, 0)
-    box.pack_start(ctrl, False, False, 0)
-
-    return overlay_card(CARD_DARK, box)
 
 
 # ── Bottom navigation (static stubs) ──────────────────────────────────────────
@@ -533,10 +480,10 @@ def make_bottom_nav():
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         inner.set_halign(Gtk.Align.CENTER)
         ic = Gtk.Label(label=icon)
-        ic.modify_font(Pango.FontDescription("Sans 16"))
+        ic.modify_font(Pango.FontDescription("Sans 19"))
         ic.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
         nm = Gtk.Label(label=name)
-        nm.modify_font(Pango.FontDescription("Sans 10"))
+        nm.modify_font(Pango.FontDescription("Sans 13"))
         nm.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
         inner.pack_start(ic, False, False, 0)
         inner.pack_start(nm, False, False, 0)
@@ -598,11 +545,11 @@ class SmartHomeApp(Gtk.Window):
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         hdr.set_margin_start(PAD*2); hdr.set_margin_end(PAD*2)
         hdr.set_margin_top(8);       hdr.set_margin_bottom(5)
-        hdr.pack_start(lbl("Smart Home", 20, bold=True, color=T_LIGHT), True, True, 0)
-        loc = lbl("📍 Indianapolis, IN", 11, color=ACCENT)
+        hdr.pack_start(lbl("Smart Home", 23, bold=True, color=T_LIGHT), True, True, 0)
+        loc = lbl("📍 Indianapolis, IN", 14, color=ACCENT)
         _css(loc, "label {{ background: rgba({},{},{},0.12); border-radius:10px; padding:2px 8px; }}".format(
             int(ACCENT[0]*255), int(ACCENT[1]*255), int(ACCENT[2]*255)))
-        self._clock_lbl = lbl("--:--", 14, color=T_MID)
+        self._clock_lbl = lbl("--:--", 17, color=T_MID)
         hdr.pack_end(self._clock_lbl, False, False, 0)
         hdr.pack_end(loc,             False, False, 8)
         root.pack_start(hdr, False, False, 0)
@@ -613,13 +560,6 @@ class SmartHomeApp(Gtk.Window):
         self._hero.set_margin_start(PAD); self._hero.set_margin_end(PAD)
         self._hero.set_margin_bottom(PAD)
         root.pack_start(self._hero, False, False, 0)
-
-        # Music strip — explicit height for the same reason
-        music = make_music_strip()
-        music.set_size_request(-1, 66)
-        music.set_margin_start(PAD); music.set_margin_end(PAD)
-        music.set_margin_bottom(PAD)
-        root.pack_start(music, False, False, 0)
 
         # Tile grid — cap height so tiles don't swallow the screen
         grid = Gtk.Grid()
