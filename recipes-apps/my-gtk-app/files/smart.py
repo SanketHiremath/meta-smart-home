@@ -23,6 +23,30 @@ def _detect_kiosk():
 KIOSK = False       # overridden in __main__ block
 IS_WINDOWS = platform.system() == "Windows"
 
+# ── Screen detection & UI scaling ─────────────────────────────────────────────
+_BASE_W, _BASE_H = 800, 480
+
+def _detect_screen():
+    try:
+        display = Gdk.Display.get_default()
+        if display is None:
+            return _BASE_W, _BASE_H
+        monitor = display.get_monitor(0)
+        if monitor is None:
+            return _BASE_W, _BASE_H
+        geo = monitor.get_geometry()
+        return geo.width, geo.height
+    except Exception:
+        return _BASE_W, _BASE_H
+
+_SW, _SH = _detect_screen()
+SCALE = min(_SW / _BASE_W, _SH / _BASE_H)
+print("[smart_home] screen={}x{}  scale={:.2f}".format(_SW, _SH, SCALE))
+
+def _s(n):
+    """Scale a pixel or point value to the detected screen resolution."""
+    return max(1, round(n * SCALE))
+
 # ── Palette (dark mode — Option C) ────────────────────────────────────────────
 BG             = (0.129, 0.114, 0.094)   # #211d18  window bg
 CARD_DARK      = (0.165, 0.145, 0.125)   # #2a2520  hero/music/tiles
@@ -35,7 +59,7 @@ TILE_FEELSLIKE = (0.165, 0.118, 0.102)   # #2a1e1a  feels-like tile
 TILE_UV        = (0.165, 0.145, 0.063)   # #2a2510  UV index tile
 TILE_WIFI      = (0.102, 0.125, 0.125)   # #1a2020  WiFi tile
 NAV_BG         = (0.102, 0.086, 0.063)   # #1a1610  bottom nav
-PAD            = 6                        # grid gap px
+PAD            = _s(6)                    # grid gap px (scaled)
 
 # ── WMO weather code → condition string ────────────────────────────────────────
 _WMO = {
@@ -201,7 +225,7 @@ def lbl(text, size=11, bold=False, color=None, wrap=False, xalign=0.0):
     l = Gtk.Label(label=text)
     l.set_xalign(xalign)
     l.modify_font(Pango.FontDescription(
-        "Sans {} {}".format("Bold" if bold else "Regular", size)))
+        "Sans {} {}".format("Bold" if bold else "Regular", _s(size))))
     l.override_color(Gtk.StateFlags.NORMAL, _rgba(*(color or T_LIGHT)))
     if wrap:
         l.set_line_wrap(True)
@@ -209,13 +233,13 @@ def lbl(text, size=11, bold=False, color=None, wrap=False, xalign=0.0):
     return l
 
 def _vbox(mt=8, mb=8, ml=10, mr=10, sp=4):
-    b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=sp)
-    b.set_margin_top(mt); b.set_margin_bottom(mb)
-    b.set_margin_start(ml); b.set_margin_end(mr)
+    b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=_s(sp))
+    b.set_margin_top(_s(mt)); b.set_margin_bottom(_s(mb))
+    b.set_margin_start(_s(ml)); b.set_margin_end(_s(mr))
     return b
 
 def _hbox(sp=6):
-    return Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=sp)
+    return Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=_s(sp))
 
 
 class Card(Gtk.DrawingArea):
@@ -283,7 +307,7 @@ class _RingArc(Gtk.DrawingArea):
         cr.arc(cx, cy, R, a0, av); cr.stroke()
 
         layout = w.create_pango_layout(str(self.value))
-        layout.set_font_description(Pango.FontDescription("Sans Bold 25"))
+        layout.set_font_description(Pango.FontDescription("Sans Bold {}".format(_s(25))))
         lw, lh = layout.get_pixel_size()
         cr.set_source_rgb(*T_LIGHT)
         cr.move_to(cx - lw / 2, cy - lh / 2)
@@ -295,14 +319,14 @@ class HumidityHero(Gtk.Overlay):
 
     def __init__(self):
         super().__init__()
-        self._ring  = _RingArc(62, size=70)
+        self._ring  = _RingArc(62, size=_s(70))
         self._cond  = lbl("–––",              16, color=T_LIGHT)
         self._tag   = lbl("",                  14, color=ACCENT)
         self._stamp = lbl("Updating…",         13, color=T_DIM)
 
         outer = _hbox(12)
-        outer.set_margin_start(14); outer.set_margin_end(14)
-        outer.set_margin_top(6);    outer.set_margin_bottom(6)
+        outer.set_margin_start(_s(14)); outer.set_margin_end(_s(14))
+        outer.set_margin_top(_s(6));    outer.set_margin_bottom(_s(6))
 
         # Left — ring + "% RH" label
         ring_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
@@ -414,17 +438,22 @@ class _SignalBars(Gtk.DrawingArea):
     def __init__(self):
         super().__init__()
         self.bars = 0
-        self.set_size_request(44, 16)
+        self.set_size_request(_s(44), _s(16))
         self.connect("draw", self._draw)
 
     def _draw(self, w, cr):
-        for i, h in enumerate([4, 7, 10, 14]):
-            x = 2 + i * 10
+        W = w.get_allocated_width()
+        H = w.get_allocated_height()
+        bar_w = max(4, W // 10)
+        gap   = max(2, W // 22)
+        for i, frac in enumerate([0.25, 0.45, 0.65, 1.0]):
+            h = max(2, int(H * frac))
+            x = gap + i * (bar_w + gap)
             if i < self.bars:
                 cr.set_source_rgb(*ACCENT)
             else:
                 cr.set_source_rgba(*ACCENT, 0.2)
-            cr.rectangle(x, 16 - h, 7, h)
+            cr.rectangle(x, H - h, bar_w, h)
             cr.fill()
 
 
@@ -480,10 +509,10 @@ def make_bottom_nav():
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         inner.set_halign(Gtk.Align.CENTER)
         ic = Gtk.Label(label=icon)
-        ic.modify_font(Pango.FontDescription("Sans 19"))
+        ic.modify_font(Pango.FontDescription("Sans {}".format(_s(19))))
         ic.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
         nm = Gtk.Label(label=name)
-        nm.modify_font(Pango.FontDescription("Sans 13"))
+        nm.modify_font(Pango.FontDescription("Sans {}".format(_s(13))))
         nm.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
         inner.pack_start(ic, False, False, 0)
         inner.pack_start(nm, False, False, 0)
@@ -492,9 +521,9 @@ def make_bottom_nav():
         btn.set_relief(Gtk.ReliefStyle.NONE)
         btn.set_sensitive(False)
         _css(btn, """
-            button { background:transparent; border:none; border-radius:8px;
-                     padding:4px 6px; min-height:50px; }
-        """)
+            button {{ background:transparent; border:none; border-radius:8px;
+                     padding:4px 6px; min-height:{}px; }}
+        """.format(_s(50)))
         bar.pack_start(btn, True, True, 0)
 
     return bar
@@ -544,7 +573,7 @@ class SmartHomeApp(Gtk.Window):
         # Header
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         hdr.set_margin_start(PAD*2); hdr.set_margin_end(PAD*2)
-        hdr.set_margin_top(8);       hdr.set_margin_bottom(5)
+        hdr.set_margin_top(_s(8));   hdr.set_margin_bottom(_s(5))
         hdr.pack_start(lbl("Smart Home", 23, bold=True, color=T_LIGHT), True, True, 0)
         loc = lbl("📍 Indianapolis, IN", 14, color=ACCENT)
         _css(loc, "label {{ background: rgba({},{},{},0.12); border-radius:10px; padding:2px 8px; }}".format(
@@ -556,7 +585,7 @@ class SmartHomeApp(Gtk.Window):
 
         # Hero — explicit height so GTK doesn't squish it against the tile grid
         self._hero = HumidityHero()
-        self._hero.set_size_request(-1, 148)
+        self._hero.set_size_request(-1, _s(148))
         self._hero.set_margin_start(PAD); self._hero.set_margin_end(PAD)
         self._hero.set_margin_bottom(PAD)
         root.pack_start(self._hero, False, False, 0)
@@ -568,7 +597,7 @@ class SmartHomeApp(Gtk.Window):
         grid.set_margin_bottom(PAD)
         grid.set_column_homogeneous(True)
         grid.set_hexpand(True); grid.set_vexpand(True)
-        grid.set_size_request(-1, 175)
+        grid.set_size_request(-1, _s(175))
 
         self._tile_temp = WeatherTile("🌡", "Temperature", TILE_WEATHER,   (0.494, 0.796, 0.494))
         self._tile_feel = WeatherTile("🌬", "Feels Like",  TILE_FEELSLIKE, (0.878, 0.439, 0.314))
