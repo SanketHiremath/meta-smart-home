@@ -63,7 +63,7 @@ NAV_BG         = (0.102, 0.086, 0.063)
 PAD            = _s(6)
 
 # ── Stock constants ────────────────────────────────────────────────────────────
-_STOCK_API_KEY  = ""   # <-- paste your key from financialdata.net
+_STOCK_API_KEY  = "95768d5b248c5138be6983db60041a28"
 _STOCK_API_BASE = "https://financialdata.net/api/v1/stock-prices"
 _STOCKS = [
     ("AAPL",  "Apple Inc."),
