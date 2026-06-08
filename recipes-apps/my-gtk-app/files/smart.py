@@ -21,7 +21,7 @@ def _detect_kiosk():
         return True
     return False
 
-KIOSK = False       # overridden in __main__ block
+KIOSK = False
 IS_WINDOWS = platform.system() == "Windows"
 
 # ── Screen detection & UI scaling ─────────────────────────────────────────────
@@ -48,19 +48,39 @@ def _s(n):
     """Scale a pixel or point value to the detected screen resolution."""
     return max(1, round(n * SCALE))
 
-# ── Palette (dark mode — Option C) ────────────────────────────────────────────
-BG             = (0.129, 0.114, 0.094)   # #211d18  window bg
-CARD_DARK      = (0.165, 0.145, 0.125)   # #2a2520  hero/music/tiles
-ACCENT         = (0.180, 0.769, 0.714)   # #2ec4b6  teal accent
-T_LIGHT        = (0.961, 0.949, 0.933)   # #f5f2ee  primary text
-T_MID          = (0.541, 0.502, 0.439)   # #8a8070  secondary text
-T_DIM          = (0.416, 0.392, 0.376)   # #6a6460  timestamps/tertiary
-TILE_WEATHER   = (0.118, 0.165, 0.118)   # #1e2a1e  temperature tile
-TILE_FEELSLIKE = (0.165, 0.118, 0.102)   # #2a1e1a  feels-like tile
-TILE_UV        = (0.165, 0.145, 0.063)   # #2a2510  UV index tile
-TILE_WIFI      = (0.102, 0.125, 0.125)   # #1a2020  WiFi tile
-NAV_BG         = (0.102, 0.086, 0.063)   # #1a1610  bottom nav
-PAD            = _s(6)                    # grid gap px (scaled)
+# ── Palette (dark mode) ────────────────────────────────────────────────────────
+BG             = (0.129, 0.114, 0.094)
+CARD_DARK      = (0.165, 0.145, 0.125)
+ACCENT         = (0.180, 0.769, 0.714)
+T_LIGHT        = (0.961, 0.949, 0.933)
+T_MID          = (0.541, 0.502, 0.439)
+T_DIM          = (0.416, 0.392, 0.376)
+TILE_WEATHER   = (0.118, 0.165, 0.118)
+TILE_FEELSLIKE = (0.165, 0.118, 0.102)
+TILE_UV        = (0.165, 0.145, 0.063)
+TILE_WIFI      = (0.102, 0.125, 0.125)
+NAV_BG         = (0.102, 0.086, 0.063)
+PAD            = _s(6)
+
+# ── Stock constants ────────────────────────────────────────────────────────────
+_STOCK_API_KEY  = ""   # <-- paste your key from financialdata.net
+_STOCK_API_BASE = "https://financialdata.net/api/v1/stock-prices"
+_STOCKS = [
+    ("AAPL",  "Apple Inc."),
+    ("MSFT",  "Microsoft"),
+    ("GOOGL", "Alphabet"),
+    ("AMZN",  "Amazon"),
+    ("NVDA",  "NVIDIA"),
+]
+_STOCK_BGS = [
+    (0.102, 0.130, 0.165),
+    (0.100, 0.150, 0.100),
+    (0.165, 0.100, 0.090),
+    (0.150, 0.130, 0.055),
+    (0.090, 0.100, 0.165),
+]
+_COL_UP   = (0.20, 0.82, 0.45)
+_COL_DOWN = (0.95, 0.35, 0.35)
 
 # ── WMO weather code → condition string ────────────────────────────────────────
 _WMO = {
@@ -84,12 +104,32 @@ def wmo_condition(code):
 @dataclass
 class WeatherData:
     humidity:    int
-    temperature: float   # °F
-    feels_like:  float   # °F
+    temperature: float
+    feels_like:  float
     uv_index:    float
     condition:   str
-    fetched_at:  str     # "HH:MM"
+    fetched_at:  str
     cached:      bool = False
+
+
+@dataclass
+class StockData:
+    symbol:  str
+    close:   float
+    open_p:  float   # named open_p to avoid shadowing the built-in open()
+    high:    float
+    low:     float
+    volume:  int
+    date:    str
+    cached:  bool = False
+
+    @property
+    def change_pct(self):
+        return ((self.close - self.open_p) / self.open_p * 100) if self.open_p else 0.0
+
+    @property
+    def is_up(self):
+        return self.close >= self.open_p
 
 
 def _replace_weather(data, **kwargs):
@@ -97,7 +137,6 @@ def _replace_weather(data, **kwargs):
 
 
 def parse_weather_response(raw):
-    """Parse an Open-Meteo /v1/forecast JSON dict into WeatherData."""
     c = raw["current"]
     return WeatherData(
         humidity    = int(c["relativehumidity_2m"]),
@@ -110,7 +149,6 @@ def parse_weather_response(raw):
 
 
 def parse_signal_bars(proc_line):
-    """Parse a /proc/net/wireless data line → 1–4 bars (0 on bad input)."""
     try:
         parts = proc_line.split()
         dbm = float(parts[3].rstrip("."))
@@ -123,7 +161,6 @@ def parse_signal_bars(proc_line):
 
 
 def parse_ssid_from_wpa_cli(output):
-    """Extract SSID from wpa_cli status output."""
     for line in output.splitlines():
         if line.startswith("ssid="):
             return line.split("=", 1)[1].strip()
@@ -131,7 +168,6 @@ def parse_ssid_from_wpa_cli(output):
 
 
 def parse_ip_from_addr(output):
-    """Extract first IPv4 address from `ip addr show` output."""
     m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
     return m.group(1) if m else ""
 
@@ -148,7 +184,7 @@ _METEO_URL = (
 
 class WeatherFetcher:
     def __init__(self, callback):
-        self._callback = callback   # callable(WeatherData | None)
+        self._callback = callback
         self._last = None
         self._lock = threading.Lock()
 
@@ -156,7 +192,6 @@ class WeatherFetcher:
         threading.Thread(target=self._fetch, daemon=True).start()
 
     def _fetch(self):
-        # Embedded boards often lack a CA bundle — skip SSL verification.
         _ctx = ssl.create_default_context()
         _ctx.check_hostname = False
         _ctx.verify_mode = ssl.CERT_NONE
@@ -172,15 +207,59 @@ class WeatherFetcher:
             with self._lock:
                 last = self._last
             if last is not None:
-                cached = _replace_weather(last, cached=True)
-                GLib.idle_add(self._callback, cached)
+                GLib.idle_add(self._callback, _replace_weather(last, cached=True))
             else:
                 GLib.idle_add(self._callback, None)
 
 
+class StockFetcher:
+    def __init__(self, callback):
+        self._callback = callback
+        self._last = {}
+        self._lock = threading.Lock()
+
+    def fetch_async(self):
+        threading.Thread(target=self._fetch_all, daemon=True).start()
+
+    def _fetch_all(self):
+        if not _STOCK_API_KEY:
+            print("[stocks] no API key — skipping fetch", flush=True)
+            GLib.idle_add(self._callback, {})
+            return
+        _ctx = ssl.create_default_context()
+        _ctx.check_hostname = False
+        _ctx.verify_mode = ssl.CERT_NONE
+        results = {}
+        for symbol, _ in _STOCKS:
+            url = "{}?identifier={}&key={}".format(_STOCK_API_BASE, symbol, _STOCK_API_KEY)
+            try:
+                with _urllib_request.urlopen(url, timeout=15, context=_ctx) as resp:
+                    raw = json.loads(resp.read())
+                records = raw if isinstance(raw, list) else raw.get("data", [])
+                if records:
+                    records.sort(key=lambda r: r.get("date", ""), reverse=True)
+                    r = records[0]
+                    results[symbol] = StockData(
+                        symbol = symbol,
+                        close  = float(r.get("close",  0)),
+                        open_p = float(r.get("open",   0)),
+                        high   = float(r.get("high",   0)),
+                        low    = float(r.get("low",    0)),
+                        volume = int(float(r.get("volume", 0))),
+                        date   = r.get("date", ""),
+                    )
+            except Exception as e:
+                print("[stocks] {} error: {} — {}".format(symbol, type(e).__name__, e), flush=True)
+                with self._lock:
+                    if symbol in self._last:
+                        results[symbol] = _dc_replace(self._last[symbol], cached=True)
+        with self._lock:
+            self._last.update(results)
+        GLib.idle_add(self._callback, results)
+
+
 # ── WiFi reader ────────────────────────────────────────────────────────────────
 def read_wifi_status():
-    """Returns (ssid, bars 0-4, ip)."""
     return _wifi_ssid(), _wifi_bars(), _wifi_ip()
 
 
@@ -199,7 +278,6 @@ def _wifi_bars():
     try:
         with open("/proc/net/wireless") as f:
             for line in f:
-                # wlu1u3 is the RTL8188ETV USB dongle name before the rename link takes effect
                 if "wlan0" in line or "wlu1u3" in line:
                     return parse_signal_bars(line)
     except Exception:
@@ -286,8 +364,8 @@ def overlay_card(bg=CARD_DARK, child=None):
         ov.set_overlay_pass_through(child, True)
     return ov
 
+
 class _RingArc(Gtk.DrawingArea):
-    """Teal ring arc showing humidity %. Draws value text in the centre."""
     def __init__(self, value=62, size=80):
         super().__init__()
         self.value = value
@@ -305,11 +383,9 @@ class _RingArc(Gtk.DrawingArea):
 
         cr.set_line_width(6)
         cr.set_line_cap(cairo.LINE_CAP_ROUND)
-
-        cr.set_source_rgba(0.25, 0.22, 0.20, 1)   # track
+        cr.set_source_rgba(0.25, 0.22, 0.20, 1)
         cr.arc(cx, cy, R, a0, a1); cr.stroke()
-
-        cr.set_source_rgb(*ACCENT)                  # filled arc
+        cr.set_source_rgb(*ACCENT)
         cr.arc(cx, cy, R, a0, av); cr.stroke()
 
         layout = w.create_pango_layout(str(self.value))
@@ -321,20 +397,17 @@ class _RingArc(Gtk.DrawingArea):
 
 
 class HumidityHero(Gtk.Overlay):
-    """Hero card — humidity ring arc + condition/timestamp labels."""
-
     def __init__(self):
         super().__init__()
         self._ring  = _RingArc(62, size=_s(70))
-        self._cond  = lbl("–––",              16, color=T_LIGHT)
-        self._tag   = lbl("",                  14, color=ACCENT)
-        self._stamp = lbl("Updating…",         13, color=T_DIM)
+        self._cond  = lbl("–––",          16, color=T_LIGHT)
+        self._tag   = lbl("",             14, color=ACCENT)
+        self._stamp = lbl("Updating…",   13, color=T_DIM)
 
         outer = _hbox(12)
         outer.set_margin_start(_s(14)); outer.set_margin_end(_s(14))
         outer.set_margin_top(_s(6));    outer.set_margin_bottom(_s(6))
 
-        # Left — ring + "% RH" label
         ring_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         ring_col.set_valign(Gtk.Align.CENTER)
         pct = lbl("% RH", 13, color=ACCENT)
@@ -343,7 +416,6 @@ class HumidityHero(Gtk.Overlay):
         ring_col.pack_start(pct,        False, False, 0)
         outer.pack_start(ring_col, False, False, 0)
 
-        # Right — title + location + condition + tag/stamp row
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         info.set_valign(Gtk.Align.CENTER)
         info.pack_start(lbl("Humidity", 21, bold=True, color=T_LIGHT), False, False, 0)
@@ -370,18 +442,16 @@ class HumidityHero(Gtk.Overlay):
         self._stamp.set_text("Updated {}{}".format(data.fetched_at, suffix))
         h = data.humidity
         if h < 30:
-            tag, col = "● Dry",          (0.88, 0.75, 0.40)
+            tag, col = "● Dry",         (0.88, 0.75, 0.40)
         elif h < 60:
-            tag, col = "● Comfortable",  ACCENT
+            tag, col = "● Comfortable", ACCENT
         else:
-            tag, col = "● Humid",        (0.88, 0.50, 0.40)
+            tag, col = "● Humid",       (0.88, 0.50, 0.40)
         self._tag.set_text(tag)
         self._tag.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
 
 
 class WeatherTile(Gtk.Overlay):
-    """Reusable data tile — temperature, feels-like, or UV index."""
-
     def __init__(self, icon, label, bg, fg):
         super().__init__()
         box = _vbox(mt=8, mb=8, ml=9, mr=9, sp=2)
@@ -421,10 +491,10 @@ class WeatherTile(Gtk.Overlay):
         fill_w = min(W, int((self._uv_val / 11.0) * W))
         if fill_w > 0:
             grad = cairo.LinearGradient(0, 0, W, 0)
-            grad.add_color_stop_rgb(0.00, 0.494, 0.796, 0.494)  # green
-            grad.add_color_stop_rgb(0.36, 0.910, 0.784, 0.251)  # yellow
-            grad.add_color_stop_rgb(0.64, 0.910, 0.439, 0.251)  # orange
-            grad.add_color_stop_rgb(1.00, 0.878, 0.314, 0.314)  # red
+            grad.add_color_stop_rgb(0.00, 0.494, 0.796, 0.494)
+            grad.add_color_stop_rgb(0.36, 0.910, 0.784, 0.251)
+            grad.add_color_stop_rgb(0.64, 0.910, 0.439, 0.251)
+            grad.add_color_stop_rgb(1.00, 0.878, 0.314, 0.314)
             cr.set_source(grad)
             cr.rectangle(0, 1, fill_w, H - 2); cr.fill()
 
@@ -498,6 +568,118 @@ class WifiTile(Gtk.Overlay):
         self._chip.set_text("On" if bars > 0 else "Off")
 
 
+# ── Stock row ──────────────────────────────────────────────────────────────────
+class StockRow(Gtk.Overlay):
+    """One card row per stock — symbol, name, H/L/volume, price, change%."""
+
+    def __init__(self, symbol, name, bg):
+        super().__init__()
+        box = _hbox(0)
+        box.set_margin_start(_s(14)); box.set_margin_end(_s(14))
+        box.set_margin_top(_s(4));    box.set_margin_bottom(_s(4))
+
+        # Left column: ticker + company name
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=_s(2))
+        left.set_valign(Gtk.Align.CENTER)
+        left.set_size_request(_s(110), -1)
+        self._sym_lbl  = lbl(symbol, 15, bold=True, color=ACCENT)
+        self._name_lbl = lbl(name,    9, color=T_DIM)
+        left.pack_start(self._sym_lbl,  False, False, 0)
+        left.pack_start(self._name_lbl, False, False, 0)
+        box.pack_start(left, False, False, 0)
+
+        # Mid column: high/low + volume
+        mid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=_s(2))
+        mid.set_valign(Gtk.Align.CENTER)
+        self._hl_lbl  = lbl("H: –    L: –", 9, color=T_DIM)
+        self._vol_lbl = lbl("Vol: –",        9, color=T_DIM)
+        mid.pack_start(self._hl_lbl,  False, False, 0)
+        mid.pack_start(self._vol_lbl, False, False, 0)
+        box.pack_start(mid, True, True, 0)
+
+        # Right column: close price + change%
+        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=_s(2))
+        right.set_valign(Gtk.Align.CENTER)
+        right.set_halign(Gtk.Align.END)
+        self._price_lbl = lbl("–",  17, bold=True, color=T_LIGHT)
+        self._chg_lbl   = lbl("–",  11, color=T_DIM)
+        right.pack_start(self._price_lbl, False, False, 0)
+        right.pack_start(self._chg_lbl,   False, False, 0)
+        box.pack_start(right, False, False, 0)
+
+        self.add(Card(bg))
+        self.add_overlay(box)
+        self.set_overlay_pass_through(box, True)
+
+    @staticmethod
+    def _fmt_vol(v):
+        if v >= 1_000_000: return "{:.1f}M".format(v / 1_000_000)
+        if v >= 1_000:     return "{:.0f}K".format(v / 1_000)
+        return str(v)
+
+    def update(self, data):
+        col   = _COL_UP if data.is_up else _COL_DOWN
+        arrow = "↑" if data.is_up else "↓"
+        self._price_lbl.set_text("${:.2f}".format(data.close))
+        chg_txt = "{} {:.2f}%".format(arrow, abs(data.change_pct))
+        if data.cached:
+            chg_txt += "  (cached)"
+        self._chg_lbl.set_text(chg_txt)
+        self._chg_lbl.override_color(Gtk.StateFlags.NORMAL, _rgba(*col))
+        self._hl_lbl.set_text("H:{:.2f}  L:{:.2f}".format(data.high, data.low))
+        self._vol_lbl.set_text("Vol: {}  {}".format(self._fmt_vol(data.volume), data.date))
+
+    def reset(self):
+        self._price_lbl.set_text("–")
+        self._chg_lbl.set_text("–")
+        self._chg_lbl.override_color(Gtk.StateFlags.NORMAL, _rgba(*T_DIM))
+        self._hl_lbl.set_text("H: –    L: –")
+        self._vol_lbl.set_text("Vol: –")
+
+
+# ── Stock page ─────────────────────────────────────────────────────────────────
+class StockPage(Gtk.Box):
+    """Full-screen page showing the latest prices for the top-5 stocks."""
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.set_hexpand(True); self.set_vexpand(True)
+
+        # Header
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        hdr.set_margin_start(PAD * 2); hdr.set_margin_end(PAD * 2)
+        hdr.set_margin_top(_s(8));     hdr.set_margin_bottom(_s(5))
+        hdr.pack_start(lbl("📈 Markets", 23, bold=True, color=T_LIGHT), True, True, 0)
+        self._stamp = lbl("Updating…", 11, color=T_DIM)
+        hdr.pack_end(self._stamp, False, False, 0)
+        self.pack_start(hdr, False, False, 0)
+
+        # One StockRow per ticker
+        self._rows = {}
+        rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=PAD)
+        rows_box.set_margin_start(PAD); rows_box.set_margin_end(PAD)
+        rows_box.set_margin_bottom(PAD)
+        for i, (sym, name) in enumerate(_STOCKS):
+            row = StockRow(sym, name, _STOCK_BGS[i % len(_STOCK_BGS)])
+            row.set_vexpand(True)
+            self._rows[sym] = row
+            rows_box.pack_start(row, True, True, 0)
+        self.pack_start(rows_box, True, True, 0)
+
+    def update(self, stock_data):
+        if not stock_data:
+            msg = "Add API key to smart.py" if not _STOCK_API_KEY else "Fetch failed"
+            self._stamp.set_text(msg)
+            for row in self._rows.values():
+                row.reset()
+            return
+        for sym, data in stock_data.items():
+            if sym in self._rows:
+                self._rows[sym].update(data)
+        self._stamp.set_text("Updated {}".format(datetime.datetime.now().strftime("%H:%M")))
+
+
+# ── Nav icons ──────────────────────────────────────────────────────────────────
 _ICONS_DIR = "/opt/my-gtk-app/icons"
 _NAV_ITEMS = [
     ("home.png",    "Home",     True),
@@ -508,7 +690,6 @@ _NAV_ITEMS = [
 ]
 
 def _nav_icon(filename, size, active):
-    """Load a PNG nav icon scaled to size. Falls back to a text label."""
     path = "{}/{}".format(_ICONS_DIR, filename)
     try:
         pb = GdkPixbuf.Pixbuf.new_from_file_at_size(path, size, size)
@@ -520,7 +701,7 @@ def _nav_icon(filename, size, active):
         lb.override_color(Gtk.StateFlags.NORMAL, _rgba(*(ACCENT if active else T_DIM)))
         return lb
 
-# ── Bottom navigation (static stubs) ──────────────────────────────────────────
+# ── Bottom navigation ──────────────────────────────────────────────────────────
 def make_bottom_nav():
     bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
     _css(bar, "* {{ background: rgb({},{},{}); }}".format(
@@ -579,17 +760,46 @@ class SmartHomeApp(Gtk.Window):
         if KIOSK:
             self.fullscreen()
 
+        # Weather (home page)
         self._fetcher = WeatherFetcher(self._on_weather)
         self._fetcher.fetch_async()
-        GLib.timeout_add_seconds(1200, self._poll_weather)  # every 20 min
+        GLib.timeout_add_seconds(1200, self._poll_weather)
+
+        # Stocks (markets page — default)
+        self._stock_fetcher = StockFetcher(self._on_stocks)
+        self._stock_fetcher.fetch_async()
+        GLib.timeout_add_seconds(300, self._poll_stocks)   # refresh every 5 min
+
         self._tick()
         GLib.timeout_add_seconds(30, self._tick)
 
     # ── Layout ──────────────────────────────────────────────────────────────
     def _build(self):
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_hexpand(True); outer.set_vexpand(True)
+        self.add(outer)
+
+        self._stack = Gtk.Stack()
+        self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self._stack.set_transition_duration(200)
+        self._stack.set_hexpand(True); self._stack.set_vexpand(True)
+
+        # Page 1 — Markets (default)
+        self._stock_page = StockPage()
+        self._stack.add_named(self._stock_page, "stocks")
+
+        # Page 2 — Smart home dashboard
+        self._stack.add_named(self._build_home_page(), "home")
+
+        self._stack.set_visible_child_name("stocks")
+
+        outer.pack_start(self._stack, True, True, 0)
+        outer.pack_start(make_bottom_nav(), False, False, 0)
+        self.show_all()
+
+    def _build_home_page(self):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         root.set_hexpand(True); root.set_vexpand(True)
-        self.add(root)
 
         # Header
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -604,14 +814,14 @@ class SmartHomeApp(Gtk.Window):
         hdr.pack_end(loc,             False, False, 8)
         root.pack_start(hdr, False, False, 0)
 
-        # Hero — explicit height so GTK doesn't squish it against the tile grid
+        # Humidity hero
         self._hero = HumidityHero()
         self._hero.set_size_request(-1, _s(148))
         self._hero.set_margin_start(PAD); self._hero.set_margin_end(PAD)
         self._hero.set_margin_bottom(PAD)
         root.pack_start(self._hero, False, False, 0)
 
-        # Tile grid — cap height so tiles don't swallow the screen
+        # Tile grid
         grid = Gtk.Grid()
         grid.set_column_spacing(PAD)
         grid.set_margin_start(PAD); grid.set_margin_end(PAD)
@@ -632,8 +842,7 @@ class SmartHomeApp(Gtk.Window):
             grid.attach(tile, col, 0, 1, 1)
 
         root.pack_start(grid, True, True, 0)
-        root.pack_start(make_bottom_nav(), False, False, 0)
-        self.show_all()
+        return root
 
     # ── Timers / callbacks ───────────────────────────────────────────────────
     def _tick(self):
@@ -647,10 +856,14 @@ class SmartHomeApp(Gtk.Window):
         self._fetcher.fetch_async()
         return True
 
+    def _poll_stocks(self):
+        self._stock_fetcher.fetch_async()
+        return True
+
     def _on_weather(self, data):
         self._hero.update(data)
         if data is None:
-            GLib.timeout_add_seconds(60, self._poll_weather)  # retry sooner on failure
+            GLib.timeout_add_seconds(60, self._poll_weather)
             return False
         self._tile_temp.update(
             value="{:.1f}°".format(data.temperature),
@@ -671,7 +884,11 @@ class SmartHomeApp(Gtk.Window):
             chip=chip,
             uv_val=uv,
         )
-        return False  # GLib.idle_add one-shot
+        return False
+
+    def _on_stocks(self, data):
+        self._stock_page.update(data)
+        return False
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
