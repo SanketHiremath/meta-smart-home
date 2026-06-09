@@ -63,8 +63,7 @@ NAV_BG         = (0.102, 0.086, 0.063)
 PAD            = _s(6)
 
 # ── Stock constants ────────────────────────────────────────────────────────────
-_STOCK_API_KEY  = "95768d5b248c5138be6983db60041a28"
-_STOCK_API_BASE = "https://financialdata.net/api/v1/stock-prices"
+_YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 _STOCKS = [
     ("AAPL",  "Apple Inc."),
     ("MSFT",  "Microsoft"),
@@ -222,32 +221,26 @@ class StockFetcher:
         threading.Thread(target=self._fetch_all, daemon=True).start()
 
     def _fetch_all(self):
-        if not _STOCK_API_KEY:
-            print("[stocks] no API key — skipping fetch", flush=True)
-            GLib.idle_add(self._callback, {})
-            return
         _ctx = ssl.create_default_context()
         _ctx.check_hostname = False
         _ctx.verify_mode = ssl.CERT_NONE
         results = {}
         for symbol, _ in _STOCKS:
-            url = "{}?identifier={}&key={}".format(_STOCK_API_BASE, symbol, _STOCK_API_KEY)
+            url = "{}/{}?interval=1d&range=1d".format(_YAHOO_BASE, symbol)
+            req = _urllib_request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             try:
-                with _urllib_request.urlopen(url, timeout=15, context=_ctx) as resp:
+                with _urllib_request.urlopen(req, timeout=15, context=_ctx) as resp:
                     raw = json.loads(resp.read())
-                records = raw if isinstance(raw, list) else raw.get("data", [])
-                if records:
-                    records.sort(key=lambda r: r.get("date", ""), reverse=True)
-                    r = records[0]
-                    results[symbol] = StockData(
-                        symbol = symbol,
-                        close  = float(r.get("close",  0)),
-                        open_p = float(r.get("open",   0)),
-                        high   = float(r.get("high",   0)),
-                        low    = float(r.get("low",    0)),
-                        volume = int(float(r.get("volume", 0))),
-                        date   = r.get("date", ""),
-                    )
+                meta = raw["chart"]["result"][0]["meta"]
+                results[symbol] = StockData(
+                    symbol = symbol,
+                    close  = float(meta.get("regularMarketPrice",   0)),
+                    open_p = float(meta.get("regularMarketOpen",    0)),
+                    high   = float(meta.get("regularMarketDayHigh", 0)),
+                    low    = float(meta.get("regularMarketDayLow",  0)),
+                    volume = int(meta.get("regularMarketVolume",    0)),
+                    date   = datetime.datetime.now().strftime("%Y-%m-%d"),
+                )
             except Exception as e:
                 print("[stocks] {} error: {} — {}".format(symbol, type(e).__name__, e), flush=True)
                 with self._lock:
@@ -668,8 +661,7 @@ class StockPage(Gtk.Box):
 
     def update(self, stock_data):
         if not stock_data:
-            msg = "Add API key to smart.py" if not _STOCK_API_KEY else "Fetch failed"
-            self._stamp.set_text(msg)
+            self._stamp.set_text("Fetch failed — check network")
             for row in self._rows.values():
                 row.reset()
             return
